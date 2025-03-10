@@ -1,5 +1,5 @@
 run:
-	clear && uv run python src/run.py
+	clear && uv run python src/main.py
 
 lint:
 	ruff check --fix

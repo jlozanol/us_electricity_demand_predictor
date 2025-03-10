@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -6,9 +6,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Config(BaseSettings):
 	model_config = SettingsConfigDict(env_file='dev.env', env_file_encoding='utf-8')
 	kafka_broker_address: str
-	kafka_topic_name: str
+	kafka_topic_live: Optional[str] = None
+	kafka_topic_historical: Optional[str] = None
 	region_name: Optional[str] = None
 	last_n_days: Optional[int] = None
+	live_or_historical: Literal["live", "historical"]
 	eia_api_key: str
 
 
