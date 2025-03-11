@@ -118,6 +118,35 @@ def kafka_producer(
 						feature_data = get_hist_data(start_day, end_day, region_name, demand_type)
 						total_elements = len(feature_data)
 						
+						# Check batch size and adjust feature_data if needed
+						if total_elements == 5000:
+							# Find the first T01 entry from the end
+							cutoff_index = None
+							for i, data in enumerate(reversed(feature_data)):
+								if data['human_readable_period'].endswith('T01'):
+									cutoff_index = len(feature_data) - i
+									break
+							
+							if cutoff_index is not None:
+								# Keep data up to (and including) the T01 entry
+								feature_data = feature_data[:cutoff_index]
+								# Set next batch to start from T00 of the same day
+								last_entry = feature_data[-1]['human_readable_period']  # This is the T01 entry
+								end_day = last_entry.replace('T01', 'T00')
+							else:
+								# If no T01 found, use the last entry
+								last_timestamp = feature_data[-1]['human_readable_period']
+								end_day = datetime.strptime(last_timestamp, "%Y-%m-%dT%H")
+								end_day = (end_day - timedelta(hours=1)).strftime("%Y-%m-%dT%H")
+
+							logger.info(f'Batch {batch_count} complete. Maximum records reached (5000)')
+							logger.info(f'Starting batch {batch_count + 1} with end_day: {end_day}')
+							batch_count += 1
+						else:
+							has_more_data = False
+							logger.info(f'Final batch with {total_elements} records')
+
+						# Now push the adjusted data to Kafka
 						for index, data in enumerate(feature_data, 1):
 							message = topic.serialize(
 								key=data['region'],
@@ -130,21 +159,10 @@ def kafka_producer(
 							)
 							logger.info(
 								f'Pushed {type_labels[demand_type]} demand data '
-								f'{index}/{total_elements} to Kafka: {data}'
+								f'{index}/{len(feature_data)} to Kafka: {data}'
 							)
 
-						# Check if we need to fetch more data
-						if total_elements == 5000:
-							# Update end_day to the earliest timestamp we received
-							# Subtract one hour to avoid duplicates
-							last_timestamp = feature_data[-1]['human_readable_period']
-							end_day = datetime.strptime(last_timestamp, "%Y-%m-%dT%H")
-							end_day = (end_day - timedelta(hours=1)).strftime("%Y-%m-%dT%H")
-							logger.info(f'Batch {batch_count} complete. Maximum records reached (5000)')
-							logger.info(f'Starting batch {batch_count + 1} with end_day: {end_day}')
-							batch_count += 1
-						else:
-							has_more_data = False
+						if not has_more_data:
 							logger.info(f'Finished pushing historical {type_labels[demand_type]} demand data to Kafka')
 							logger.info(f'Total batches processed: {batch_count}, Final record count: {total_elements}')
 
@@ -329,4 +347,3 @@ if __name__ == '__main__':
 		live_or_historical=config.live_or_historical,
 		kafka_topic=config.kafka_topic,
 	)
-	
