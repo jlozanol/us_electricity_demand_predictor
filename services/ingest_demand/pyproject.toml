@@ -8,3 +8,6 @@ dependencies = [
     "loguru>=0.7.3",
     "quixstreams>=3.9.0",
 ]
+
+[dependency-groups]
+dev = []

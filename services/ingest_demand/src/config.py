@@ -1,9 +1,22 @@
-from typing import Literal, Optional, List
+from typing import List, Literal, Optional
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
-VALID_REGIONS = {"CAL", "CAR", "CENT", "FLA", "MIDA", "MIDW", "NE", "NW", "NY", "SE", "SW", "TEX"}
+VALID_REGIONS = {
+	'CAL',
+	'CAR',
+	'CENT',
+	'FLA',
+	'MIDA',
+	'MIDW',
+	'NE',
+	'NW',
+	'NY',
+	'SE',
+	'SW',
+	'TEX',
+}
 
 
 class Config(BaseSettings):

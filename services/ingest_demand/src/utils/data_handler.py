@@ -48,16 +48,16 @@ def process_batch(
 	if has_more_data:
 		cutoff_index = None
 		for i, data in enumerate(reversed(feature_data)):
-			if data['human_readable_period'].endswith('T01'):
+			if data['human_read_period'].endswith('T01'):
 				cutoff_index = len(feature_data) - i
 				break
 
 		if cutoff_index is not None:
 			feature_data = feature_data[:cutoff_index]
-			last_entry = feature_data[-1]['human_readable_period']
+			last_entry = feature_data[-1]['human_read_period']
 			end_day = last_entry.replace('T01', 'T00')
 		else:
-			last_timestamp = feature_data[-1]['human_readable_period']
+			last_timestamp = feature_data[-1]['human_read_period']
 			end_day = datetime.strptime(last_timestamp, '%Y-%m-%dT%H')
 			end_day = (end_day - timedelta(hours=1)).strftime('%Y-%m-%dT%H')
 
@@ -127,7 +127,6 @@ def convert_to_feature(list_of_dicts: list) -> list:
 
 	Returns:
 		list: List of dictionaries containing the transformed electricity demand data.
-
 	"""
 	list_of_dicts = [
 		{

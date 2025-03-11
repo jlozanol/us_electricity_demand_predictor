@@ -1,7 +1,8 @@
-name: redpanda-dev-cluster
+name: redpanda-cluster
 networks:
   redpanda_network:
     driver: bridge
+    name: redpanda_network
 volumes:
   redpanda: null
 services:
