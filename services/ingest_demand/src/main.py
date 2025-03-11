@@ -6,6 +6,26 @@ from loguru import logger
 from quixstreams import Application
 import time
 from typing import Tuple
+import sys
+
+# Configure loguru to write to both console and file
+# Create logs directory if it doesn't exist
+from pathlib import Path
+Path("logs").mkdir(exist_ok=True)
+
+# Generate filename with timestamp
+log_filename = f"logs/demand_ingest_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+# Configure logger to write to both console and file
+logger.remove()  # Remove default handler
+logger.add(sys.stderr, format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
+logger.add(log_filename, 
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+    rotation="100 MB",  # Create new file when current one reaches 100MB
+    retention="30 days"  # Keep logs for 30 days
+)
+
+logger.info(f"Starting new logging session. Logs will be saved to: {log_filename}")
 
 def kafka_producer(
 		kafka_broker_address: str,
@@ -20,6 +40,7 @@ def kafka_producer(
 	Args:
 		kafka_broker_address (str): The address of the Kafka broker.
 		kafka_topic (str): The name of the Kafka topic.
+		kafka_consumer_group (str): The name of the Kafka consumer group.
 		region_name (str): The name of the region to fetch data for.
 		last_n_days (int): The number of days to fetch data for.
 		live_or_historical (str): Whether to fetch live or historical data.
@@ -34,9 +55,10 @@ def kafka_producer(
     # This class handles all the low-level details to connect to Kafka.
 	app = Application(
         broker_address=kafka_broker_address,
+		consumer_group=config.kafka_consumer_group,
+		auto_offset_reset='earliest',
     )
 
-    # Define the topic where we will push the trades to
 	topic = app.topic(
 		name=kafka_topic,
 		value_serializer='json',
@@ -45,12 +67,13 @@ def kafka_producer(
 	# Push the data to the Kafka Topic
 	match live_or_historical:
 		case "live":
+			demand_type='D'
 			with app.get_producer() as producer:
 				# Initialize variable to store the most recent reading
 				latest_reading = None
 				while True:
 					# Fetch new data from EIA API
-					data, _ = get_data(last_n_days, region_name)
+					data = get_live_data(last_n_days, region_name, demand_type)
 					# Get the most recent reading (first element)
 					current_reading = data[0]
 
@@ -68,6 +91,7 @@ def kafka_producer(
 							key=message.key
 						)
 						logger.info(f'New demand data pushed to Kafka: {current_reading}')
+						logger.info(f'App will wait for new data, waiting time: 10 minutes')
 						# Update our reference for comparison
 						latest_reading = current_reading
 					else:
@@ -76,41 +100,113 @@ def kafka_producer(
 					time.sleep(600)  # Wait 10 minutes (600 seconds)
 		
 		case "historical":
+			demand_types = ['D', 'DF']
+			type_labels = {'D': 'actual', 'DF': 'forecast'}
+			
 			with app.get_producer() as producer:
-				feature_D_data, feature_DF_data = get_data(last_n_days, region_name)
-				
-				# Push actual demand data (D)
-				total_D_elements = len(feature_D_data)
-				for index, data in enumerate(feature_D_data, 1):
-					message = topic.serialize(
-						key=data['region'],
-						value=data,
-					)
-					producer.produce(topic=topic.name, value=message.value, key=message.key)
-					logger.info(f'Pushed actual demand data {index}/{total_D_elements} to Kafka: {data}')
-				logger.info('Finished pushing historical actual demand data to Kafka')
+				for demand_type in demand_types:
+					# Initial time range
+					start_day, original_end_day = time_to_string(last_n_days)
+					end_day = original_end_day
+					has_more_data = True
+					batch_count = 1
 
-				# Push forecast demand data (DF)
-				total_DF_elements = len(feature_DF_data)
-				for index, data in enumerate(feature_DF_data, 1):
-					message = topic.serialize(
-						key=data['region'],
-						value=data,
-					)
-					producer.produce(topic=topic.name, value=message.value, key=message.key)
-					logger.info(f'Pushed forecast demand data {index}/{total_DF_elements} to Kafka: {data}')
-				logger.info('Finished pushing historical forecast demand data to Kafka')
+					while has_more_data:
+						logger.info(f'Fetching batch {batch_count} for {type_labels[demand_type]} data')
+						logger.info(f'Time range: {start_day} to {end_day}')
+						
+						feature_data = get_hist_data(start_day, end_day, region_name, demand_type)
+						total_elements = len(feature_data)
+						
+						for index, data in enumerate(feature_data, 1):
+							message = topic.serialize(
+								key=data['region'],
+								value=data,
+							)
+							producer.produce(
+								topic=topic.name,
+								value=message.value,
+								key=message.key
+							)
+							logger.info(
+								f'Pushed {type_labels[demand_type]} demand data '
+								f'{index}/{total_elements} to Kafka: {data}'
+							)
+
+						# Check if we need to fetch more data
+						if total_elements == 5000:
+							# Update end_day to the earliest timestamp we received
+							# Subtract one hour to avoid duplicates
+							last_timestamp = feature_data[-1]['human_readable_period']
+							end_day = datetime.strptime(last_timestamp, "%Y-%m-%dT%H")
+							end_day = (end_day - timedelta(hours=1)).strftime("%Y-%m-%dT%H")
+							logger.info(f'Batch {batch_count} complete. Maximum records reached (5000)')
+							logger.info(f'Starting batch {batch_count + 1} with end_day: {end_day}')
+							batch_count += 1
+						else:
+							has_more_data = False
+							logger.info(f'Finished pushing historical {type_labels[demand_type]} demand data to Kafka')
+							logger.info(f'Total batches processed: {batch_count}, Final record count: {total_elements}')
 
 		case _:
 			raise ValueError("Error: live_or_historical must be either 'live' or 'historical'")
 		
+def get_hist_data(
+		start_day: str,
+		end_day: str,
+		region_name: str,
+		demand_type: str,
+)->list:
+	"""
+	Gets the latest electricity demand data from the EIA API.
 
+	Args:
+		last_n_days (int): The number of days to fetch data for.
+		region_name (str): The name of the region to fetch data for.
+
+	Returns:
+		list: A list of dictionaries containing the electricity demand data.
+	"""
+
+	# Get EIA API data for the specified date range
+	# start_day, end_day: dates in YYYY-MM-DDT00 format
+	# D_data: actual demand, DF_data: day-ahead forecast
+	data = connect_api(start_day, end_day, region_name, demand_type)
+	feature_data = convert_to_feature(data)
+
+	return feature_data
+
+def get_live_data(
+		last_n_days: int,
+		region_name: str,
+		demand_type: str,
+)->list:
+	"""
+	Gets the latest electricity demand data from the EIA API.
+
+	Args:
+		last_n_days (int): The number of days to fetch data for.
+		region_name (str): The name of the region to fetch data for.
+
+	Returns:
+		list: A list of dictionaries containing the electricity demand data.
+	"""
+
+	# Get EIA API data for the specified date range
+	# start_day, end_day: dates in YYYY-MM-DDT00 format
+	# D_data: actual demand, DF_data: day-ahead forecast
+	start_day, end_day = time_to_string(last_n_days)
+	data = connect_api(start_day, end_day, region_name, demand_type)
+	feature_data = convert_to_feature(data)
+
+	return feature_data
 
 def connect_api(
 		start_day: str,
 		end_day: str,
 		region_name: str,
-) -> tuple[list, list]:
+		demand_type: str,
+) -> list:
 	"""
 	Fetch raw electricity demand data from the EIA API for the specified date.
 
@@ -118,11 +214,10 @@ def connect_api(
 		start_day (str): Start date in the format 'YYYY-MM-DDT00'.
 		end_day (str): End date in the format 'YYYY-MM-DDT00'.
 		region_name (str): The name of the region to fetch data for.
+		demand_type (str): The type of demand data to fetch ('D' for actual demand, 'DF' for day-ahead forecast).
 
 	Returns:
-		Tuple[list, list]: A tuple containing two lists:
-			1. A list of dictionaries containing the raw electricity demand data for the specified hour.
-			2. A list of dictionaries containing the raw electricity day-ahead forecast data for the specified hour.
+		list: A list of dictionaries containing the raw electricity demand data for the specified hour.
 	"""
 
 	# API URL and parameters
@@ -132,6 +227,7 @@ def connect_api(
 		'frequency': 'hourly',
 		'data[0]': 'value',
 		'facets[respondent][0]': region_name,
+		'facets[type][0]': demand_type,
 		'sort[0][column]': 'period',
 		'sort[0][direction]': 'desc',
 		'offset': 0,
@@ -148,12 +244,9 @@ def connect_api(
 	data = response.json()
 	data = data['response']['data']
 
-	# Divide the data obtained in data to 2 different tables, one with data['response']['data'][]['type'] == 'D'
-	# and the other table with  data['response']['data'][]['type'] == 'DF'
-	D_data = [entry for entry in data if entry['type'] == 'D']
-	DF_data = [entry for entry in data if entry['type'] == 'DF']
+	# breakpoint()
 
-	return D_data, DF_data
+	return data
 
 
 def time_to_string(
@@ -200,33 +293,6 @@ def convert_datestring_to_ms(
 
 	return timestamp_ms
 
-def get_data(
-		last_n_days: int,
-		region_name: str,
-)->Tuple[list, list]:
-	"""
-	Gets the latest electricity demand data from the EIA API.
-
-	Args:
-		last_n_days (int): The number of days to fetch data for.
-		region_name (str): The name of the region to fetch data for.
-
-	Returns:
-		Tuple[list, list]: A tuple containing two lists:
-			1. A list of dictionaries containing the electricity demand data.
-			2. A list of dictionaries containing the electricity day-ahead forecast data.
-	"""
-
-	# Get EIA API data for the specified date range
-	# start_day, end_day: dates in YYYY-MM-DDT00 format
-	# D_data: actual demand, DF_data: day-ahead forecast
-	start_day, end_day = time_to_string(last_n_days)
-	D_data, DF_data = connect_api(start_day, end_day, region_name)
-	feature_D_data = convert_to_feature(D_data)
-	feature_DF_data = convert_to_feature(DF_data)
-
-	return feature_D_data, feature_DF_data
-
 def convert_to_feature(list_of_dicts: list) -> list:
 	"""
 	Transform EIA API response into Kafka message format:
@@ -247,6 +313,7 @@ def convert_to_feature(list_of_dicts: list) -> list:
 			"region": entry['respondent'],
 			"electricity_demand": entry['value'],
 			"electricity_demand_type": entry['type'],
+			"human_readable_period": entry['period'],
 		}
 		for entry in list_of_dicts
 	]
@@ -260,14 +327,6 @@ if __name__ == '__main__':
 		region_name=config.region_name,
 		last_n_days=config.last_n_days,
 		live_or_historical=config.live_or_historical,
+		kafka_topic=config.kafka_topic,
 	)
-
-	
-
-	# latest_feature_D_data = feature_D_data[0]
-	
-	# logger.info(feature_D_data)
-
-	# breakpoint()
-	# print('Breakpoint')
 	
