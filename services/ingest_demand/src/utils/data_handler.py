@@ -132,10 +132,10 @@ def convert_to_feature(list_of_dicts: list) -> list:
 	list_of_dicts = [
 		{
 			'timestamp': convert_datestring_to_ms(entry['period']),
+			'human_read_period': entry['period'],
 			'region': entry['respondent'],
-			'electricity_demand': entry['value'],
-			'electricity_demand_type': entry['type'],
-			'human_readable_period': entry['period'],
+			'demand': entry['value'],
+			'demand_type': entry['type'],
 		}
 		for entry in list_of_dicts
 	]

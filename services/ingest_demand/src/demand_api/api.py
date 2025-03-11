@@ -20,10 +20,8 @@ def connect_api(
 	Returns:
 		list: A list of dictionaries containing the raw electricity demand data for the specified hour.
 	"""
-
 	# API URL and parameters
 	url = 'https://api.eia.gov/v2/electricity/rto/region-data/data/'
-	region_name = config.region_name
 	params = {
 		'frequency': 'hourly',
 		'data[0]': 'value',
