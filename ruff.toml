@@ -1,0 +1,9 @@
+line-length = 88
+
+[format]
+quote-style = "single"
+indent-style = "tab"
+docstring-code-format = true
+
+[lint]
+extend-select = ["I"]

@@ -15,6 +15,7 @@ VALID_REGIONS = {
 	'NY',
 	'SE',
 	'SW',
+	'TEN',
 	'TEX',
 }
 

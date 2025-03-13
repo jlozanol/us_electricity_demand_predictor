@@ -5,7 +5,7 @@ from typing import Any, List
 from config import config
 from loguru import logger
 from quixstreams import Application
-from utils.data_handler import get_data, process_batch, time_to_string
+from utils.data_handler import get_data, collect_demand_data, time_to_string
 from utils.logger import setup_logger
 
 
@@ -105,53 +105,40 @@ def handle_historical_data(
 	app: Application, topic: Any, region_names: List[str], last_n_days: int
 ) -> None:
 	"""Handle historical data ingestion"""
-	demand_types = ['D', 'DF']
-	type_labels = {'D': 'actual', 'DF': 'forecast'}
-
 	with app.get_producer() as producer:
 		for region_name in region_names:
 			logger.info(f'Processing historical data for region: {region_name}')
-			for demand_type in demand_types:
-				start_day, original_end_day = time_to_string(last_n_days)
-				end_day = original_end_day
-				has_more_data = True
-				batch_count = 1
-				total_records = 0
+			
+			# Get initial time range
+			start_day, end_day = time_to_string(last_n_days)
+			
+			# Collect actual demand data
+			actual_data = collect_demand_data(
+				start_day, end_day, region_name, 'D', 'actual'
+			)
+			
+			# Collect forecast demand data
+			forecast_data = collect_demand_data(
+				start_day, end_day, region_name, 'DF', 'forecast'
+			)
+			
+			# Merge actual and forecast data
+			merged_data = actual_data.copy()
+			for ts, data in forecast_data.items():
+				if ts in merged_data:
+					merged_data[ts]['demand_forecast'] = data['demand_forecast']
+				else:
+					merged_data[ts] = data
 
-				while has_more_data:
-					logger.info(
-						f'Fetching batch {batch_count} for {type_labels[demand_type]} '
-						f'data in region {region_name}'
-					)
-					logger.info(f'Time range: {start_day} to {end_day}')
+			# Sort and push to Kafka
+			sorted_data = [merged_data[ts] for ts in sorted(merged_data.keys())]
+			push_to_kafka(producer, topic, sorted_data, 'merged')
 
-					feature_data = get_data(
-						start_day=start_day,
-						end_day=end_day,
-						region_name=region_name,
-						demand_type=demand_type,
-					)
-
-					has_more_data, end_day, feature_data = process_batch(
-						feature_data, batch_count, type_labels[demand_type]
-					)
-
-					push_to_kafka(
-						producer, topic, feature_data, type_labels[demand_type]
-					)
-
-					total_records += len(feature_data)
-
-					if not has_more_data:
-						logger.info(
-							f'Finished pushing historical {type_labels[demand_type]} '
-							f'demand data to Kafka for region {region_name}'
-						)
-						logger.info(
-							f'Total batches processed: {batch_count}, '
-							f'Final record count: {total_records}'
-						)
-					batch_count += 1
+			logger.info(
+				f'Finished pushing merged historical demand data '
+				f'to Kafka for region {region_name}'
+			)
+			logger.info(f'Final record count: {len(sorted_data)}')
 
 
 def push_to_kafka(
@@ -178,7 +165,7 @@ def main():
 
 	kafka_producer(
 		kafka_broker_address=config.kafka_broker_address,
-		region_names=config.region_names,  # Updated parameter name
+		region_names=config.region_names,
 		last_n_days=config.last_n_days,
 		live_or_historical=config.live_or_historical,
 		kafka_topic=config.kafka_topic,

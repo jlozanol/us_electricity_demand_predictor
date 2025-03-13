@@ -68,6 +68,63 @@ def process_batch(
 
 	return has_more_data, end_day, feature_data
 
+def collect_demand_data(
+	start_day: str,
+	end_day: str,
+	region_name: str,
+	demand_type: str,
+	data_label: str,
+) -> dict:
+	"""
+	Collect demand data (actual or forecast) for a given region and time range.
+	
+	Args:
+		start_day: Start date for data collection
+		end_day: End date for data collection
+		region_name: Name of the region
+		demand_type: Type of demand data ('D' for actual, 'DF' for forecast)
+		data_label: Label for logging ('actual' or 'forecast')
+		
+	Returns:
+		Dictionary mapping timestamps to demand data
+	"""
+	has_more_data = True
+	batch_count = 1
+	collected_data = {}
+	current_end_day = end_day
+
+	while has_more_data:
+		logger.info(
+			f'Fetching batch {batch_count} for {data_label} demand '
+			f'data in region {region_name}'
+		)
+		logger.info(f'Time range: {start_day} to {current_end_day}')
+
+		feature_data = get_data(
+			start_day=start_day,
+			end_day=current_end_day,
+			region_name=region_name,
+			demand_type=demand_type,
+		)
+
+		has_more_data, current_end_day, feature_data = process_batch(
+			feature_data, batch_count, data_label
+		)
+
+		for data in feature_data:
+			ts = data['timestamp_ms']
+			collected_data[ts] = {
+				'timestamp_ms': ts,
+				'human_read_period': data['human_read_period'],
+				'region': data['region'],
+				'demand_actual': data['demand'] if demand_type == 'D' else None,
+				'demand_forecast': data['demand'] if demand_type == 'DF' else None,
+			}
+
+		batch_count += 1
+
+	return collected_data
+
 
 def time_to_string(
 	last_n_days: int,
@@ -130,10 +187,10 @@ def convert_to_feature(list_of_dicts: list) -> list:
 	"""
 	list_of_dicts = [
 		{
-			'timestamp': convert_datestring_to_ms(entry['period']),
+			'timestamp_ms': convert_datestring_to_ms(entry['period']),
 			'human_read_period': entry['period'],
 			'region': entry['respondent'],
-			'demand': entry['value'],
+			'demand': int(entry['value']),
 			'demand_type': entry['type'],
 		}
 		for entry in list_of_dicts

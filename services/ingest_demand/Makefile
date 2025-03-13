@@ -1,10 +1,10 @@
 run-live-dev:
 	cp live.env .env
-	clear && uv run python src/main.py
+	clear && uv run --active python src/main.py
 
 run-hist-dev:
 	cp hist.env .env
-	clear && uv run python src/main.py
+	clear && uv run --active python src/main.py
 
 build:
 	docker build -f Dockerfile -t ingest-demand .
