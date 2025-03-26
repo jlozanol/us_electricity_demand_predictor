@@ -6,15 +6,19 @@ A service for ingesting hourly electricity demand data from different regions in
 
 - Real-time electricity demand data ingestion
 - Historical data batch processing
-- Support for both actual demand and day-ahead forecast data
-- Configurable regional data collection
+- Support for multiple data types:
+  - Actual demand (D)
+  - Day-ahead forecast (DF)
+  - Total interchange (TI)
+  - Net generation (NG)
+- Configurable multi-region data collection
 - Kafka integration using Redpanda
 
 ## Prerequisites
 
 - Python 3.12.9
 - Docker (for Redpanda)
-- EIA API key
+- EIA API key (obtain from [EIA website](https://www.eia.gov/opendata/))
 
 ## Installation
 
@@ -39,9 +43,49 @@ Create a `.env` file with the following variables:
 EIA_API_KEY=your_api_key
 KAFKA_BROKER_ADDRESS=your_kafka_broker
 KAFKA_TOPIC=your_topic_name
-REGION_NAME=your_region
-LAST_N_DAYS=number_of_days
+REGION_NAMES=CAL,MIDA,NE  # Comma-separated list of regions
+LAST_N_DAYS=7
 LIVE_OR_HISTORICAL=live|historical
+```
+
+### Available Regions
+
+The service supports the following regions:
+
+- CAL: California
+- CAR: Carolinas
+- CENT: Central
+- FLA: Florida
+- MIDA: Mid-Atlantic
+- MIDW: Midwest
+- NE: New England
+- NW: Northwest
+- NY: New York
+- SE: Southeast
+- SW: Southwest
+- TEN: Tennessee
+- TEX: Texas
+
+## Running the Service
+
+### Development Mode
+
+```bash
+# For live data collection
+make run-live-dev
+
+# For historical data collection
+make run-hist-dev
+```
+
+### Docker Mode
+
+```bash
+# For live data collection
+make run-live
+
+# For historical data collection
+make run-hist
 ```
 
 ## Data Format
@@ -50,21 +94,25 @@ The service processes and publishes data in the following format:
 
 ```json
 {
-  "timestamp": 1234567890000,
+  "timestamp_ms": 1234567890000,
+  "human_read_period": "YYYY-MM-DDTHH",
   "region": "REGION_CODE",
-  "electricity_demand": 1000.0,
-  "electricity_demand_type": "D|DF",
-  "human_readable_period": "YYYY-MM-DDTHH"
+  "demand": 1000.0,
+  "forecast": 1050.0,
+  "ti": -250.0,
+  "ng": 750.0
 }
 ```
 
 Where:
 
-- `timestamp`: Unix timestamp in milliseconds
-- `region`: Regional identifier
-- `electricity_demand`: Actual demand in megawatthours (MWh)
-- `electricity_demand_type`: "D" for actual demand, "DF" for day-ahead forecast
-- `human_readable_period`: Human-readable timestamp
+- `timestamp_ms`: Unix timestamp in milliseconds
+- `human_read_period`: Human-readable timestamp (YYYY-MM-DDTHH)
+- `region`: Regional identifier (e.g., CAL, MIDA)
+- `demand`: Actual electricity demand in megawatthours (MWh)
+- `forecast`: Day-ahead forecast in megawatthours (MWh)
+- `ti`: Total interchange in megawatthours (MWh)
+- `ng`: Net generation in megawatthours (MWh)
 
 ## Dependencies
 

@@ -252,48 +252,74 @@ def get_demand_params(region_name: str, start_day: str, end_day: str) -> dict:
 
 def merge_demand_data(data_types: dict[str, list]) -> list:
 	"""
-	Merge different types of demand data into a single list
+	Merge different types of demand data into a single list. This function combines
+	four different types of electricity data:
+	- D: Actual demand (real-time or historical consumption)
+	- DF: Day-ahead forecast (predicted demand)
+	- TI: Total interchange (power exchanged with neighboring regions)
+	- NG: Net generation (total power produced within the region)
+
+	The function ensures that for each timestamp and region combination, we have
+	all four metrics in a single record, with NULL values where data is missing.
 
 	Args:
 		data_types (dict): Dictionary containing lists of different data types
-			Keys should be: 'D', 'DF', 'TI', 'NG'
+			Structure: {
+				'D': [list of actual demand records],
+				'DF': [list of forecast records],
+				'TI': [list of interchange records],
+				'NG': [list of generation records]
+			}
+			Each record contains: timestamp_ms, region, electricity_demand, etc.
 
 	Returns:
-		list: Merged and sorted list of demand data
+		list: Merged and sorted list of demand data. Each entry contains:
+			- timestamp_ms: Unix timestamp in milliseconds
+			- human_read_period: Human-readable timestamp (YYYY-MM-DDTHH)
+			- region: Regional identifier (e.g., 'CAL', 'MIDA', etc.)
+			- demand: Actual demand in MWh (can be None)
+			- forecast: Day-ahead forecast in MWh (can be None)
+			- ti: Total interchange in MWh (can be None)
+			- ng: Net generation in MWh (can be None)
 	"""
 	merged_data = {}
 
-	# Define data type mapping for cleaner code
+	# Map EIA API data types to our internal field names
+	# This makes the code more maintainable and easier to extend
 	type_mapping = {
-		'D': 'demand',
-		'DF': 'forecast',
-		'TI': 'total interchange',
-		'NG': 'net generation',
+		'D': 'demand',      # Actual demand
+		'DF': 'forecast',   # Day-ahead forecast
+		'TI': 'ti',        # Total interchange
+		'NG': 'ng'         # Net generation
 	}
 
-	# Process each entry once
+	# Process each data type (D, DF, TI, NG) and its entries
 	for data_type, entries in data_types.items():
 		field_name = type_mapping[data_type]
 
+		# Process each entry within the current data type
 		for entry in entries:
+			# Create a unique key for each timestamp-region combination
 			key = (entry['timestamp_ms'], entry['region'])
 
 			if key not in merged_data:
-				# Initialize new entry with all fields as None
+				# First time seeing this timestamp-region combination
+				# Initialize a new entry with all metrics set to None
 				merged_data[key] = {
 					'timestamp_ms': entry['timestamp_ms'],
 					'human_read_period': entry['human_read_period'],
 					'region': entry['region'],
-					'demand': None,
-					'forecast': None,
-					'total interchange': None,
-					'net generation': None,
+					'demand': None,    # Actual demand
+					'forecast': None,  # Day-ahead forecast
+					'ti': None,       # Total interchange
+					'ng': None        # Net generation
 				}
 
-			# Update the specific field
+			# Update the specific metric for this timestamp-region combination
 			merged_data[key][field_name] = entry['electricity_demand']
 
-	# Convert to list and sort
+	# Convert the dictionary to a list and sort by timestamp
+	# This ensures chronological order in the output
 	merged_list = list(merged_data.values())
 	merged_list.sort(key=lambda x: x['timestamp_ms'])
 
@@ -302,35 +328,59 @@ def merge_demand_data(data_types: dict[str, list]) -> list:
 
 def connect_api(start_day: str, end_day: str, region_name: str) -> list:
 	"""
-	Fetch raw electricity demand data from the EIA API for the specified date.
+	Fetch raw electricity demand data from the EIA API for the specified date range
+	and region. This function handles the complete process of:
+	1. Making the API request
+	2. Processing the raw response
+	3. Converting data to our internal format
+	4. Merging different types of data
+
+	The EIA API endpoint used is the regional electricity data endpoint, which
+	provides hourly data for demand, forecasts, interchange, and generation.
 
 	Args:
-		start_day (str): Start date in YYYY-MM-DDT00 format
-		end_day (str): End date in YYYY-MM-DDT00 format
-		region_name (str): Region identifier
+		start_day (str): Start date in YYYY-MM-DDT00 format (e.g., "2024-03-01T00")
+		end_day (str): End date in YYYY-MM-DDT00 format (e.g., "2024-03-07T00")
+		region_name (str): Region identifier (e.g., "CAL", "MIDA", "NE", etc.)
 
 	Returns:
-		list: Merged and sorted list of demand data
+		list: Merged and sorted list of demand data. Each entry contains all
+			  available metrics (demand, forecast, interchange, generation) for
+			  a specific timestamp and region.
+
+	Example:
+		>>> data = connect_api("2024-03-01T00", "2024-03-07T00", "CAL")
+		>>> print(data[0])
+		{
+			'timestamp_ms': 1709251200000,
+			'human_read_period': '2024-03-01T00',
+			'region': 'CAL',
+			'demand': 18240,
+			'forecast': 18500,
+			'ti': -2500,
+			'ng': 15740
+		}
 	"""
-	# API URL and parameters
+	# EIA API endpoint for regional electricity data
 	url = 'https://api.eia.gov/v2/electricity/rto/region-data/data/'
 	params = get_demand_params(region_name, start_day, end_day)
 
-	# Fetch and process data
+	# Fetch raw data from the API
 	raw_data = fetch_eia_data(url, params)
 
-	# Group data by type
+	# Group raw data by type (D, DF, TI, NG)
+	# Initialize empty lists for all possible data types
 	data_by_type = {'D': [], 'DF': [], 'TI': [], 'NG': []}
 	for entry in raw_data:
 		data_by_type[entry['type']].append(entry)
 
-	# Convert each type to features
+	# Convert each type of data to our internal feature format
 	processed_data = {
 		data_type: convert_to_feature(entries)
 		for data_type, entries in data_by_type.items()
 	}
 
-	# Merge all data types
+	# Merge all data types into a single chronological list
 	return merge_demand_data(processed_data)
 
 
