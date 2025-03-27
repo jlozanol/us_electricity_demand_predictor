@@ -27,7 +27,6 @@ class Config(BaseSettings):
 	region_names: List[str] = None
 	last_n_days: int = None
 	live_or_historical: Literal['live', 'historical']
-	eia_api_key: str
 
 	@field_validator('region_names')
 	@classmethod
@@ -40,5 +39,9 @@ class Config(BaseSettings):
 			)
 		return v
 
+class APICredentials(BaseSettings):
+	model_config = SettingsConfigDict(env_file='credentials.env', env_file_encoding='utf-8')
+	eia_api_key: str
 
 config = Config()
+api_credentials = APICredentials()

@@ -1,23 +1,182 @@
 from datetime import datetime, timezone
-import numpy as np
+from typing import Any, List, Optional, Tuple
+
 import holidays
-from loguru import logger
-from quixstreams import Application
-from typing import Any, Optional, List, Tuple
+import numpy as np
 from config import config
+from loguru import logger
+from quixstreams import Application, State
+
+# Maximum number of hourly data points to keep in state (1 week of hourly data)
+MAX_WINDOW_IN_STATE = 168
 
 
 def custom_ts_extractor(
-    value: Any,
-    headers: Optional[List[Tuple[str, bytes]]],
-    timestamp: float,
-    timestamp_type, #: TimestampType,
+	value: Any,
+	headers: Optional[List[Tuple[str, bytes]]],
+	timestamp: float,
+	timestamp_type,
 ) -> int:
-    """
-    Specifying a custom timestamp extractor to use the timestamp from the message payload 
-    instead of Kafka timestamp.
-    """
-    return value["timestamp_ms"]
+	"""Extract timestamp from message payload instead of using Kafka timestamp."""
+	return value['timestamp_ms']
+
+
+def update_window(data: dict, state: State) -> dict:
+	"""
+	Maintain a sliding window of historical data points in state.
+
+	Args:
+		data: Current data point
+		state: State object for storing persistent data
+
+	Returns:
+		The current data point (not the entire window)
+	"""
+	# Get existing data from state or initialize empty list
+	all_data = state.get('all_data', [])
+
+	# Handle the new data point
+	if not all_data:
+		# First data point
+		all_data = [data]
+	elif same_window(data, all_data[-1]):
+		# Replace last data point if same time window
+		all_data[-1] = data
+	else:
+		# Add new data point
+		all_data.append(data)
+
+	# Remove oldest data point if window size exceeded
+	if len(all_data) > MAX_WINDOW_IN_STATE:
+		all_data.pop(0)
+
+	# Debug logging
+	# logger.debug(f'Number of candles in state for {data["region"]}: {len(all_data)}')
+	# logger.debug(f'Data: {all_data}')
+
+	# Update state
+	state.set('all_data', all_data)
+	return data  # Return the current data point, not the entire window
+
+
+def same_window(data_1: dict, data_2: dict) -> bool:
+	"""Check if two data points belong to the same time window."""
+	return (
+		data_1['timestamp_ms'] == data_2['timestamp_ms']
+		and data_1['region'] == data_2['region']
+	)
+
+
+def compute_rolling_values(data: dict, state: State) -> dict:
+	"""
+	Compute statistical features from historical data.
+
+	Args:
+		data: Current data point
+		state: State containing historical data
+
+	Returns:
+		Data point enriched with statistical features
+	"""
+	all_data = state.get('all_data', [])
+
+	# Extract demand values from historical data
+	demand = np.array([d['demand'] for d in all_data if d['demand'] is not None])
+	values = {}
+
+	# Get current demand value to use as fallback
+	current_demand = data.get('demand')
+
+	if len(demand) > 0:
+		# Basic statistics
+		values['full_mean'] = float(np.mean(demand))
+		values['full_median'] = float(np.median(demand))
+
+		# Last 3 hours statistics
+		last_3_demand = demand[-3:] if len(demand) >= 3 else demand
+		values['mean_3'] = float(np.mean(last_3_demand))
+		values['median_3'] = float(np.median(last_3_demand))
+
+		# Last 24 hours statistics
+		last_24_demand = demand[-24:] if len(demand) >= 24 else demand
+		values['mean_24'] = float(np.mean(last_24_demand))
+		values['median_24'] = float(np.median(last_24_demand))
+
+		# Lag features - use current demand as fallback instead of None
+		values['lag_1h'] = float(demand[-2]) if len(demand) >= 2 else current_demand
+		values['lag_24h'] = float(demand[-25]) if len(demand) >= 25 else current_demand
+		values['lag_168h'] = (
+			float(demand[-169]) if len(demand) >= 169 else current_demand
+		)
+	else:
+		# Default values when no historical data is available
+		# Use current demand for all lag features
+		for key in [
+			'full_mean',
+			'mean_3',
+			'mean_24',
+			'full_median',
+			'median_3',
+			'median_24',
+			'lag_1h',
+			'lag_24h',
+			'lag_168h',
+		]:
+			values[key] = current_demand
+
+	# Combine with current data point
+	return {**data, **values}
+
+
+def add_time_data(value: dict) -> None:
+	"""
+	Add time-based features to data point.
+
+	Creates cyclical encodings for hour, day of week, and month,
+	plus holiday indicator and hour categorization.
+	"""
+	# Convert timestamp to datetime
+	timestamp = datetime.fromtimestamp(value['timestamp_ms'] / 1000, tz=timezone.utc)
+
+	# Add holiday indicator
+	is_holiday = timestamp.date() in holidays.US()
+
+	# Extract time components
+	hour = timestamp.hour
+	day_of_week = timestamp.weekday()
+	month = timestamp.month
+
+	# Add hour categorization
+	is_weekend = day_of_week >= 5  # 5=Saturday, 6=Sunday
+
+	if is_weekend:
+		# Weekend logic - only evening peak or off peak
+		if 18 <= hour <= 22:
+			value['hour_category'] = 'evening_peak'
+		else:
+			value['hour_category'] = 'off_peak'
+	else:
+		# Weekday logic - all three categories
+		if 9 <= hour <= 17:
+			value['hour_category'] = 'office_hours'
+		elif 18 <= hour <= 22:
+			value['hour_category'] = 'evening_peak'
+		else:
+			value['hour_category'] = 'off_peak'
+
+	# Add numerical hour category
+	category_mapping = {'off_peak': 0, 'office_hours': 1, 'evening_peak': 2}
+	value['hour_category_num'] = category_mapping[value['hour_category']]
+
+	value['is_holiday'] = int(is_holiday)
+
+	# Add cyclical encodings (sin/cos transformations)
+	value['hour_sin'] = float(np.sin(2 * np.pi * hour / 24))
+	value['hour_cos'] = float(np.cos(2 * np.pi * hour / 24))
+	value['day_of_week_sin'] = float(np.sin(2 * np.pi * day_of_week / 7))
+	value['day_of_week_cos'] = float(np.cos(2 * np.pi * day_of_week / 7))
+	value['month_sin'] = float(np.sin(2 * np.pi * month / 12))
+	value['month_cos'] = float(np.cos(2 * np.pi * month / 12))
 
 
 def main(
@@ -25,98 +184,58 @@ def main(
 	kafka_input_topic: str,
 	kafka_output_topic: str,
 	kafka_consumer_group: str,
-	region_names: list[str],
 	live_or_historical: str,
 ) -> None:
 	"""
-	Function ingests electricity demand data from the Kafka Topic
-	Generates features to be sent to the Feature Store for further usage in
-	the ML model for predicting electricity demand.
+	Process electricity demand data from Kafka, generate features, and output to another topic.
 
-	Args:
-		kafka_broker_address (str): The address of the Kafka broker.
-		kafka_input_topic (str): The name of the Kafka input topic.
-		kafka_output_topic (str): The name of the Kafka output topic.
-		kafka_consumer_group (str): The name of the Kafka consumer group.
-		region_names (list[str]): List of region names to fetch data for.
-		live_or_historical (str): Whether to fetch live or historical data.
-
-	Returns:
-		None
+	Workflow:
+	1. Read raw demand data from input topic
+	2. Add time-based features
+	3. Maintain sliding window of historical data
+	4. Compute statistical features
+	5. Output enriched data to output topic
 	"""
 	logger.info('Starting feature creation services...')
+	logger.info(f'Mode: {live_or_historical}')
 
-	# Initialise the Quix Streams application
-	app = Application(
-		broker_address=kafka_broker_address,
-		consumer_group=kafka_consumer_group,
-		auto_offset_reset='earliest',
-	)
+	if live_or_historical == 'live':
+		# Live processing mode
+		pass  # For now, just pass
+	elif live_or_historical == 'historical':
+		# Historical processing mode - use existing code
+		# Initialize Quix Streams application
+		app = Application(
+			broker_address=kafka_broker_address,
+			consumer_group=kafka_consumer_group,
+			auto_offset_reset='earliest',
+		)
 
-	# Define the input and output topics
-	input_topic = app.topic(
-		name=kafka_input_topic,
-		value_deserializer='json',
-		timestamp_extractor=custom_ts_extractor,
-	)
-	
-	output_topic = app.topic(
-		name=kafka_output_topic,
-		value_serializer='json',
-	)
+		# Define input/output topics
+		input_topic = app.topic(
+			name=kafka_input_topic,
+			value_deserializer='json',
+			timestamp_extractor=custom_ts_extractor,
+		)
+		output_topic = app.topic(
+			name=kafka_output_topic,
+			value_serializer='json',
+		)
 
-	# Creating the Steaming DataFrame
+		# Create processing pipeline
+		sdf = app.dataframe(topic=input_topic)
+		sdf = sdf.update(add_time_data)
+		sdf = sdf.apply(update_window, stateful=True)
+		sdf = sdf.apply(compute_rolling_values, stateful=True)
+		sdf = sdf.update(lambda value: logger.debug(f'Final message: {value}'))
+		sdf = sdf.to_topic(output_topic)
 
-	sdf = app.dataframe(topic=input_topic)
-	
-	sdf = sdf.update(add_time_data)
-
-	# push these message to the output topic
-	sdf = sdf.to_topic(output_topic)
-
-	app.run()
-
-def add_time_data(value) -> None:
-	"""
-	Create new time features on for the Streaming DataFrame. This takes the value of `timestamp_ms`
-	to create different time features.
-
-	Note that this function doesn't return anything and only mutates the incoming value
-
-	Args:
-		value (dict): The incoming value from the Streaming DataFrame.
-
-	Returns:
-		None
-	"""
-	# Converting the timestamp_ms to datetime object in UTC
-	timestamp_ms = value["timestamp_ms"]
-	timestamp = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
-	
-	# Get US holidays
-	us_holidays = holidays.US()
-	
-	# Check if the date is a holiday
-	value['is_holiday'] = int(timestamp.date() in us_holidays)
-	
-	# Extracting the date components of the timestamp
-	hour = timestamp.hour
-	day_of_week = timestamp.weekday()
-	month = timestamp.month
-
-	# Encoding the hour of the day cyclically (sin/cos functions)
-	value['hour_sin'] = float(np.sin(2 * np.pi * hour / 24))
-	value['hour_cos'] = float(np.cos(2 * np.pi * hour / 24))
-
-	# Encoding the day of the week cyclically (sin/cos functions)
-	value['day_of_week_sin'] = float(np.sin(2 * np.pi * day_of_week / 7))
-	value['day_of_week_cos'] = float(np.cos(2 * np.pi * day_of_week / 7))
-
-	# Encoding the month of the year cyclically (sin/cos functions)
-	value['month_sin'] = float(np.sin(2 * np.pi * month / 12))
-	value['month_cos'] = float(np.cos(2 * np.pi * month / 12))
-
-	logger.debug(value)
+		# Run the application
+		app.run()
+	else:
+		raise ValueError(
+			f"Invalid mode: {live_or_historical}. Must be 'live' or 'historical'"
+		)
 
 
 if __name__ == '__main__':
@@ -125,6 +244,5 @@ if __name__ == '__main__':
 		kafka_input_topic=config.kafka_input_topic,
 		kafka_output_topic=config.kafka_output_topic,
 		kafka_consumer_group=config.kafka_consumer_group,
-		region_names=config.region_names,
 		live_or_historical=config.live_or_historical,
 	)

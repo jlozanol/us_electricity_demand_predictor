@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Tuple
 
 import requests
-from config import config
+from config import config, api_credentials
 from loguru import logger
 from quixstreams import Application
 
@@ -93,8 +93,10 @@ def kafka_producer(
 			with app.get_producer() as producer:
 				for region_name in region_names:
 					logger.info(f'Processing historical data for region: {region_name}')
-					
-					start_day, end_day = get_shifted_time_range(last_n_days, shift_hours=192)
+
+					start_day, end_day = get_shifted_time_range(
+						last_n_days, shift_hours=192
+					)
 					current_start = start_day
 					has_more_data = True
 					batch_count = 1
@@ -106,14 +108,14 @@ def kafka_producer(
 							f'in region {region_name}'
 						)
 						logger.info(f'Time range: {current_start} to {end_day}')
-						
+
 						# Fetch data from API
 						merged_data = connect_api(
 							start_day=current_start,
 							end_day=end_day,
-							region_name=region_name
+							region_name=region_name,
 						)
-						
+
 						# Update first and last periods
 						if first_period is None:
 							first_period = merged_data[0]['human_read_period']
@@ -183,16 +185,16 @@ def kafka_producer(
 							logger.info(
 								f'Finished pushing historical merged data to Kafka for region {region_name}'
 							)
-							logger.info(
-								f'Total batches processed: {batch_count}'
-							)
+							logger.info(f'Total batches processed: {batch_count}')
 
 					# Store region total and update grand total
 					region_records[region_name] = region_total
 					total_records_all_regions += region_total
-					
+
 					# Log region summary
-					logger.info(f'Region {region_name} complete. Total records sent: {region_total}')
+					logger.info(
+						f'Region {region_name} complete. Total records sent: {region_total}'
+					)
 
 				# Log final summary for all regions
 				logger.info('\n=== Final Processing Summary ===')
@@ -246,7 +248,7 @@ def get_demand_params(region_name: str, start_day: str, end_day: str) -> dict:
 		'length': 5000,
 		'start': start_day,
 		'end': end_day,
-		'api_key': config.eia_api_key,
+		'api_key': api_credentials.eia_api_key,
 	}
 
 
@@ -287,10 +289,10 @@ def merge_demand_data(data_types: dict[str, list]) -> list:
 	# Map EIA API data types to our internal field names
 	# This makes the code more maintainable and easier to extend
 	type_mapping = {
-		'D': 'demand',      # Actual demand
-		'DF': 'forecast',   # Day-ahead forecast
-		'TI': 'ti',        # Total interchange
-		'NG': 'ng'         # Net generation
+		'D': 'demand',  # Actual demand
+		'DF': 'forecast',  # Day-ahead forecast
+		'TI': 'ti',  # Total interchange
+		'NG': 'ng',  # Net generation
 	}
 
 	# Process each data type (D, DF, TI, NG) and its entries
@@ -309,10 +311,10 @@ def merge_demand_data(data_types: dict[str, list]) -> list:
 					'timestamp_ms': entry['timestamp_ms'],
 					'human_read_period': entry['human_read_period'],
 					'region': entry['region'],
-					'demand': None,    # Actual demand
+					'demand': None,  # Actual demand
 					'forecast': None,  # Day-ahead forecast
-					'ti': None,       # Total interchange
-					'ng': None        # Net generation
+					'ti': None,  # Total interchange
+					'ng': None,  # Net generation
 				}
 
 			# Update the specific metric for this timestamp-region combination
@@ -349,7 +351,7 @@ def connect_api(start_day: str, end_day: str, region_name: str) -> list:
 			  a specific timestamp and region.
 
 	Example:
-		>>> data = connect_api("2024-03-01T00", "2024-03-07T00", "CAL")
+		>>> data = connect_api('2024-03-01T00', '2024-03-07T00', 'CAL')
 		>>> print(data[0])
 		{
 			'timestamp_ms': 1709251200000,
@@ -544,7 +546,7 @@ def main():
 
 	kafka_producer(
 		kafka_broker_address=config.kafka_broker_address,
-		region_names=config.region_names,  # Updated parameter name
+		region_names=config.region_names,
 		last_n_days=config.last_n_days,
 		live_or_historical=config.live_or_historical,
 		kafka_topic=config.kafka_topic,
