@@ -2,7 +2,37 @@ from config import config, hopsworks_credentials
 from loguru import logger
 from quixstreams import Application
 from sinks import HopsworksFeatureStoreSink
+import signal
+import sys
+import time
+import threading
 
+# Global variable to track message processing
+last_message_time = 0
+# Timeout in seconds to wait for new messages before shutting down in historical mode
+IDLE_TIMEOUT = 60
+
+def update_last_message_time(value):
+    """Update the timestamp of the last processed message."""
+    global last_message_time
+    last_message_time = time.time()
+    return value
+
+def check_inactivity(app):
+    """Check if no messages have been received for IDLE_TIMEOUT seconds and shut down if in historical mode."""
+    global last_message_time
+    
+    while True:
+        time.sleep(2)  # Check every 2 seconds
+        if last_message_time > 0 and time.time() - last_message_time > IDLE_TIMEOUT:
+            logger.info(f"No messages received for {IDLE_TIMEOUT} seconds. Shutting down...")
+            app.stop()
+            break
+
+def signal_handler(sig, frame):
+    """Handle termination signals gracefully."""
+    logger.info("Received termination signal. Shutting down...")
+    sys.exit(0)
 
 def main(
 	kafka_broker_address: str,
@@ -34,6 +64,9 @@ def main(
 	Returns:
 	    None
 	"""
+	# Register signal handlers
+	signal.signal(signal.SIGINT, signal_handler)
+	signal.signal(signal.SIGTERM, signal_handler)
 
 	logger.info('Starting feature store ingestion service...')
 	logger.info(f'Mode: {live_or_historical}')
@@ -41,7 +74,6 @@ def main(
 	if live_or_historical == 'live':
 		# Live processing mode
 		# This will be implemented to handle real-time streaming data
-		# For now, we're just logging and exiting
 		logger.info('Live mode not yet implemented')
 		pass  # For now, just pass
 	elif live_or_historical == 'historical':
@@ -63,10 +95,16 @@ def main(
 
 		# Create a streaming dataframe from the input topic
 		sdf = app.dataframe(input_topic)
-
+		
+		# Track message processing time
+		sdf = sdf.update(update_last_message_time)
+		
 		# Write the data directly to the Hopsworks Feature Store
-		# No transformations needed as data is already processed by upstream services
 		sdf.sink(output_sink)
+
+		# Start inactivity checker in a separate thread
+		inactivity_thread = threading.Thread(target=check_inactivity, args=(app,), daemon=True)
+		inactivity_thread.start()
 
 		# Start the streaming application
 		logger.info(f'Starting to consume from topic: {kafka_input_topic}')

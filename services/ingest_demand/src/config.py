@@ -39,9 +39,13 @@ class Config(BaseSettings):
 			)
 		return v
 
+
 class APICredentials(BaseSettings):
-	model_config = SettingsConfigDict(env_file='credentials.env', env_file_encoding='utf-8')
+	model_config = SettingsConfigDict(
+		env_file='credentials.env', env_file_encoding='utf-8'
+	)
 	eia_api_key: str
+
 
 config = Config()
 api_credentials = APICredentials()

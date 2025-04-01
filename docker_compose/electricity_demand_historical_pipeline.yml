@@ -1,0 +1,53 @@
+name: electricity-demand-historical-pipeline
+networks:
+  redpanda_network:
+    external: true
+    name: redpanda_network
+services:
+  ingest_demand:
+    build:
+      context: ../services/ingest_demand
+      dockerfile: Dockerfile
+    networks:
+      - redpanda_network
+    env_file:
+      - ../services/ingest_demand/credentials.env
+      - ../services/ingest_demand/hist.env
+    environment:
+      - KAFKA_BROKER_ADDRESS=redpanda:9092
+      - KAFKA_TOPIC=demand_hist_${RUN_ID}
+
+  demand_features:
+    build:
+      context: ../services/demand_features
+      dockerfile: Dockerfile
+    networks:
+      - redpanda_network
+    env_file:
+      - ../services/demand_features/hist.env
+    environment:
+      - KAFKA_BROKER_ADDRESS=redpanda:9092
+      - KAFKA_INPUT_TOPIC=demand_hist_${RUN_ID}
+      - KAFKA_OUTPUT_TOPIC=demand_feat_hist_${RUN_ID}
+      - KAFKA_CONSUMER_GROUP=demand_feat_hist_consumer_group_${RUN_ID}
+    depends_on:
+      ingest_demand:
+        condition: service_completed_successfully
+
+  to_feature_store:
+    build:
+      context: ../services/to_feature_store
+      dockerfile: Dockerfile
+    networks:
+      - redpanda_network
+    env_file:
+      - ../services/to_feature_store/hist.env
+      - ../services/to_feature_store/credentials.env
+    environment:
+      - KAFKA_BROKER_ADDRESS=redpanda:9092
+      - KAFKA_INPUT_TOPIC=demand_feat_hist_${RUN_ID}
+      - KAFKA_CONSUMER_GROUP=to_feat_store_consumer_group_${RUN_ID}
+      - FEATURE_GROUP_NAME=demand_hist_feature_store
+    depends_on:
+      demand_features:
+        condition: service_completed_successfully

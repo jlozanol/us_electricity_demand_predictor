@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
+import signal
+import sys
+import time
 
 import holidays
 import numpy as np
@@ -9,6 +12,11 @@ from quixstreams import Application, State
 
 # Maximum number of hourly data points to keep in state (1 week of hourly data)
 MAX_WINDOW_IN_STATE = 168
+# Timeout in seconds to wait for new messages before shutting down in historical mode
+IDLE_TIMEOUT = 10
+
+# Add a global variable to track message processing
+last_message_time = 0
 
 
 def custom_ts_extractor(
@@ -179,6 +187,31 @@ def add_time_data(value: dict) -> None:
 	value['month_cos'] = float(np.cos(2 * np.pi * month / 12))
 
 
+def update_last_message_time(value):
+	"""Update the timestamp of the last processed message."""
+	global last_message_time
+	last_message_time = time.time()
+	return value
+
+
+def check_inactivity(app):
+	"""Check if no messages have been received for IDLE_TIMEOUT seconds and shut down if in historical mode."""
+	global last_message_time
+	
+	while True:
+		time.sleep(5)  # Check every 5 seconds
+		if last_message_time > 0 and time.time() - last_message_time > IDLE_TIMEOUT:
+			logger.info(f"No messages received for {IDLE_TIMEOUT} seconds. Shutting down...")
+			app.stop()
+			break
+
+
+def signal_handler(sig, frame):
+	"""Handle termination signals gracefully."""
+	logger.info("Received termination signal. Shutting down...")
+	sys.exit(0)
+
+
 def main(
 	kafka_broker_address: str,
 	kafka_input_topic: str,
@@ -198,6 +231,10 @@ def main(
 	"""
 	logger.info('Starting feature creation services...')
 	logger.info(f'Mode: {live_or_historical}')
+
+	# Register signal handlers
+	signal.signal(signal.SIGINT, signal_handler)
+	signal.signal(signal.SIGTERM, signal_handler)
 
 	if live_or_historical == 'live':
 		# Live processing mode
@@ -224,11 +261,17 @@ def main(
 
 		# Create processing pipeline
 		sdf = app.dataframe(topic=input_topic)
+		sdf = sdf.update(update_last_message_time)  # Track message processing time
 		sdf = sdf.update(add_time_data)
 		sdf = sdf.apply(update_window, stateful=True)
 		sdf = sdf.apply(compute_rolling_values, stateful=True)
 		sdf = sdf.update(lambda value: logger.debug(f'Final message: {value}'))
 		sdf = sdf.to_topic(output_topic)
+
+		# Start inactivity checker in a separate thread if in historical mode
+		import threading
+		inactivity_thread = threading.Thread(target=check_inactivity, args=(app,), daemon=True)
+		inactivity_thread.start()
 
 		# Run the application
 		app.run()
@@ -239,6 +282,8 @@ def main(
 
 
 if __name__ == '__main__':
+	signal.signal(signal.SIGINT, signal_handler)
+	signal.signal(signal.SIGTERM, signal_handler)
 	main(
 		kafka_broker_address=config.kafka_broker_address,
 		kafka_input_topic=config.kafka_input_topic,

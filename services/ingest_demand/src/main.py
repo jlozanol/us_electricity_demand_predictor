@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Tuple
 
 import requests
-from config import config, api_credentials
+from config import api_credentials, config
 from loguru import logger
 from quixstreams import Application
 
