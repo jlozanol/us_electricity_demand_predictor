@@ -13,7 +13,7 @@ from quixstreams import Application, State
 # Maximum number of hourly data points to keep in state (1 week of hourly data)
 MAX_WINDOW_IN_STATE = 168
 # Timeout in seconds to wait for new messages before shutting down in historical mode
-IDLE_TIMEOUT = 10
+IDLE_TIMEOUT = 20
 
 # Add a global variable to track message processing
 last_message_time = 0

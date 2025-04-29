@@ -36,13 +36,13 @@ services:
 
   to_feature_store:
     build:
-      context: ../services/to_feature_store
+      context: ../services/demand_to_feature_store
       dockerfile: Dockerfile
     networks:
       - redpanda_network
     env_file:
-      - ../services/to_feature_store/hist.env
-      - ../services/to_feature_store/credentials.env
+      - ../services/demand_to_feature_store/hist.env
+      - ../services/demand_to_feature_store/credentials.env
     environment:
       - KAFKA_BROKER_ADDRESS=redpanda:9092
       - KAFKA_INPUT_TOPIC=demand_feat_hist_${RUN_ID}
