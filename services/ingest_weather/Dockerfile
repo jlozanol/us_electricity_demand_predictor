@@ -23,8 +23,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Then, use a final image without uv
 FROM python:3.12-slim-bookworm
 # It is important to use the image that matches the builder, as the path to the
-# Python executable must be the same, e.g., using `python:3.11-slim-bookworm`
-# will fail.
+# Python executable must be the same
 
 WORKDIR /app
 
@@ -32,10 +31,10 @@ WORKDIR /app
 COPY --from=builder --chown=app:app /app /app
 
 # Copy environment files
-COPY live.env hist.env ./
+COPY .env ./
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Run the FastAPI application by default
+# Run the application
 CMD ["python", "/app/src/main.py"]

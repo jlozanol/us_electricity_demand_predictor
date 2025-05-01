@@ -1,4 +1,4 @@
-name: electricity-demand-historical-pipeline
+name: historical-pipeline
 networks:
   redpanda_network:
     external: true
@@ -17,14 +17,14 @@ services:
       - KAFKA_BROKER_ADDRESS=redpanda:9092
       - KAFKA_TOPIC=demand_hist_${RUN_ID}
 
-  demand_features:
+  demand_feature:
     build:
-      context: ../services/demand_features
+      context: ../services/feature_demand
       dockerfile: Dockerfile
     networks:
       - redpanda_network
     env_file:
-      - ../services/demand_features/hist.env
+      - ../services/feature_demand/hist.env
     environment:
       - KAFKA_BROKER_ADDRESS=redpanda:9092
       - KAFKA_INPUT_TOPIC=demand_hist_${RUN_ID}
@@ -36,18 +36,18 @@ services:
 
   to_feature_store:
     build:
-      context: ../services/demand_to_feature_store
+      context: ../services/to_feature_store_demand
       dockerfile: Dockerfile
     networks:
       - redpanda_network
     env_file:
-      - ../services/demand_to_feature_store/hist.env
-      - ../services/demand_to_feature_store/credentials.env
+      - ../services/to_feature_store_demand/hist.env
+      - ../services/to_feature_store_demand/credentials.env
     environment:
       - KAFKA_BROKER_ADDRESS=redpanda:9092
       - KAFKA_INPUT_TOPIC=demand_feat_hist_${RUN_ID}
       - KAFKA_CONSUMER_GROUP=to_feat_store_consumer_group_${RUN_ID}
       - FEATURE_GROUP_NAME=demand_hist_feature_store
     depends_on:
-      demand_features:
+      demand_feature:
         condition: service_completed_successfully

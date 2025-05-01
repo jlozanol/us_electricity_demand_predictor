@@ -1,12 +1,12 @@
 [project]
-name = "demand-features"
+name = "feature-demand"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12.9"
 dependencies = [
-    "holidays>=0.68",
+    "holidays>=0.71",
     "loguru>=0.7.3",
-    "numpy>=2.2.3",
-    "quixstreams>=3.10.0",
+    "numpy>=2.2.5",
+    "quixstreams>=3.13.1",
 ]

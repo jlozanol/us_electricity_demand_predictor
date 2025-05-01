@@ -1,15 +1,15 @@
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from loguru import logger
-from config import config
 
 import numpy as np
 import pandas as pd
 import requests
+from config import config
+from loguru import logger
 from quixstreams import Application
 
-# EIA Regions with significant locations and coordinates
+# EIA Regions with significant locations and coordinates.
 eia_locations = {
 	'CAL': [
 		('Los Angeles', 34.05, -118.25),
@@ -71,7 +71,10 @@ eia_locations = {
 	],
 }
 
-def get_shifted_time_range(last_n_days: int, shift_hours: int = 192) -> tuple[datetime, datetime]:
+
+def get_shifted_time_range(
+	last_n_days: int, shift_hours: int = 192
+) -> tuple[datetime, datetime]:
 	"""
 	Calculate start and end dates with a specified hour shift:
 	- end_time: current time minus shift_hours
@@ -89,6 +92,7 @@ def get_shifted_time_range(last_n_days: int, shift_hours: int = 192) -> tuple[da
 	start_time = end_time - timedelta(days=last_n_days)
 
 	return start_time, end_time
+
 
 def fetch_weather_data(start_date, end_date):
 	"""Fetches weather data from Open-Meteo API for all locations and aggregates per EIA region."""
@@ -125,7 +129,17 @@ def fetch_weather_data(start_date, end_date):
 			response = requests.get(base_url, params=params)
 			if response.status_code == 200:
 				data = response.json()
-				timestamps_ms = list(map(lambda x: int(pd.to_datetime(x, format='%Y-%m-%dT%H:%M', utc=True).timestamp() * 1000), data['hourly']['time']))
+				timestamps_ms = list(
+					map(
+						lambda x: int(
+							pd.to_datetime(
+								x, format='%Y-%m-%dT%H:%M', utc=True
+							).timestamp()
+							* 1000
+						),
+						data['hourly']['time'],
+					)
+				)
 				timestamps_str = data['hourly']['time']
 				temp = data['hourly']['temperature_2m']
 				wind = data['hourly']['wind_speed_10m']
@@ -135,8 +149,12 @@ def fetch_weather_data(start_date, end_date):
 				)
 				apparent_temp = data['hourly']['apparent_temperature']
 				dew_point = data['hourly']['dew_point_2m']
-				direct_rad = data['hourly'].get('direct_radiation', [np.nan] * len(temp))
-				diffuse_rad = data['hourly'].get('diffuse_radiation', [np.nan] * len(temp))
+				direct_rad = data['hourly'].get(
+					'direct_radiation', [np.nan] * len(temp)
+				)
+				diffuse_rad = data['hourly'].get(
+					'diffuse_radiation', [np.nan] * len(temp)
+				)
 				precip = data['hourly']['precipitation']
 				snowfall = data['hourly']['snowfall']
 				pressure = data['hourly']['surface_pressure']
@@ -163,8 +181,12 @@ def fetch_weather_data(start_date, end_date):
 
 		# Process each timestamp on the fly with running averages
 		if region_weather:
-			all_timestamps = sorted(set(ts for df in region_weather for ts in df['timestamp_ms']))
-			end_date_t00 = datetime.combine(end_date.date(), datetime.min.time()).replace(tzinfo=timezone.utc)
+			all_timestamps = sorted(
+				set(ts for df in region_weather for ts in df['timestamp_ms'])
+			)
+			end_date_t00 = datetime.combine(
+				end_date.date(), datetime.min.time()
+			).replace(tzinfo=timezone.utc)
 			end_date_t00_ms = int(end_date_t00.timestamp() * 1000)
 			filtered_timestamps = [ts for ts in all_timestamps if ts <= end_date_t00_ms]
 
@@ -194,6 +216,7 @@ def fetch_weather_data(start_date, end_date):
 
 	return weather_data_list
 
+
 def kafka_producer(
 	kafka_broker_address: str,
 	kafka_topic: str,
@@ -202,65 +225,80 @@ def kafka_producer(
 ) -> None:
 	"""
 	Function to fetch weather data and send it to a Kafka topic.
-	
+
 	Args:
 		kafka_broker_address (str): The address of the Kafka broker.
 		kafka_topic (str): The name of the Kafka topic.
 		live_or_historical (str): Whether to fetch live or historical data.
 		last_n_days (int): The number of days to fetch data for.
-		
+
 	Returns:
 		None
 	"""
 	logger.info('Starting the ingestion of weather data service')
-	
+
 	# Initialize the Quix Streams application
 	app = Application(
 		broker_address=kafka_broker_address,
 	)
-	
+
 	# Define the topic where we will push the weather data
 	topic = app.topic(
 		name=kafka_topic,
 		value_serializer='json',
 	)
-	
+
 	# Push the data to the Kafka Topic
 	match live_or_historical:
 		case 'live':
 			pass
-					
+
 		case 'historical':
 			# Historical processing logic
 			with app.get_producer() as producer:
 				# Get date range for historical data
 				last_n_days = config.last_n_days
 				start_date, end_date = get_shifted_time_range(last_n_days)
-				
-				logger.info(f"Fetching historical weather data from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
-				
+
+				logger.info(
+					f'Fetching historical weather data from {start_date.strftime("%Y-%m-%d")} to {end_date.strftime("%Y-%m-%d")}'
+				)
+
 				# Fetch weather data
 				weather_data_list = fetch_weather_data(start_date, end_date)
-				
+
+				# Initialize counters for total records and per-region records
+				total_records = 0
+				region_records = {region: 0 for region in eia_locations.keys()}
+
 				# Push each entry to Kafka
 				for weather_data in weather_data_list:
 					message = topic.serialize(
-						key=weather_data['region'],
-						value=weather_data
+						key=weather_data['region'], value=weather_data
 					)
 					producer.produce(
-						topic=topic.name,
-						value=message.value,
-						key=message.key
+						topic=topic.name, value=message.value, key=message.key
 					)
-					logger.info(f'Historical weather data pushed to Kafka: {weather_data}')
-				
+					total_records += 1  # Increment grand total counter
+					region_records[weather_data['region']] += (
+						1  # Increment per-region counter
+					)
+					logger.info(
+						f'Historical weather data pushed to Kafka: {weather_data}'
+					)
+
+				# Log total records sent per region
+				logger.info('\n=== Final Processing Summary ===')
+				for region, count in region_records.items():
+					logger.info(f'Region {region}: {count:,} records')
+				logger.info(f'Grand Total: {total_records:,} records')
 				logger.info('Finished pushing historical weather data to Kafka')
-		
+
 		case _:
 			raise ValueError(
 				"Error: live_or_historical must be either 'live' or 'historical'"
 			)
+
 
 def setup_logger() -> str:
 	"""
@@ -296,7 +334,7 @@ def main():
 	# Create logs directory if it doesn't exist
 	Path('logs').mkdir(exist_ok=True)
 	setup_logger()
-	
+
 	# Call the kafka_producer function with configuration
 	kafka_producer(
 		kafka_broker_address=config.kafka_broker_address,

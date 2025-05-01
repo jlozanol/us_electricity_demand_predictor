@@ -33,6 +33,10 @@ COPY --from=builder --chown=app:app /app /app
 # Copy environment files
 COPY live.env hist.env ./
 
+# Install uv in the final image
+RUN pip install uv
+RUN uv venv && uv sync --frozen
+
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
 

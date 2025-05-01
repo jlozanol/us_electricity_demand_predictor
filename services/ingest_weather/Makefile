@@ -8,6 +8,14 @@ run-hist-dev:
 build:
 	docker build -f Dockerfile -t ingest-weather .
 
+run-hist: build
+	docker run -it \
+	--network redpanda_network \
+	-e KAFKA_BROKER_ADDRESS=redpanda:9092 \
+	--entrypoint /bin/sh \
+	ingest-weather \
+	-c "python src/main.py"
+
 lint:
 	ruff check --fix
 
