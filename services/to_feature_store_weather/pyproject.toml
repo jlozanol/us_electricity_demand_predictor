@@ -1,0 +1,12 @@
+[project]
+name = "to-feature-store-weather"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12.9"
+dependencies = [
+    "hopsworks>=4.2.2",
+    "loguru>=0.7.3",
+    "pyarrow>=20.0.0",
+    "quixstreams>=3.13.1",
+]

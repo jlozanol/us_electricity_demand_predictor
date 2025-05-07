@@ -7,7 +7,7 @@ stop-redpanda:
 # Historical pipeline management
 build-hist-pipeline:
 	@echo "Removing all Kafka topics that contain the word historical"
-	docker compose -f redpanda.yml exec redpanda rpk topic delete -r ".*_historical.*"
+	docker compose -f redpanda.yml exec redpanda rpk topic delete -r ".*_hist.*"
 	RUN_ID="" docker compose -f historical_pipeline.yml build
 
 start-hist-pipeline: build-hist-pipeline
@@ -20,4 +20,4 @@ stop-hist-pipeline:
 
 clean-backfill-kafka-topics:
 	@echo "Removing all Kafka topics that contain the word historical"
-	docker compose -f redpanda.yml exec redpanda rpk topic delete -r ".*_historical.*"
+	docker compose -f redpanda.yml exec redpanda rpk topic delete -r ".*_hist.*"

@@ -34,7 +34,7 @@ services:
       ingest_demand:
         condition: service_completed_successfully
 
-  to_feature_store:
+  demand_to_feature_store:
     build:
       context: ../services/to_feature_store_demand
       dockerfile: Dockerfile
@@ -50,4 +50,34 @@ services:
       - FEATURE_GROUP_NAME=demand_hist_feature_store
     depends_on:
       demand_feature:
+        condition: service_completed_successfully
+
+  ingest_weather:
+    build:
+      context: ../services/ingest_weather
+      dockerfile: Dockerfile
+    networks:
+      - redpanda_network
+    env_file:
+      - ../services/ingest_weather/.env
+    environment:
+      - KAFKA_BROKER_ADDRESS=redpanda:9092
+      - KAFKA_TOPIC=weather_hist_${RUN_ID}
+  
+  weather_to_feature_store:
+    build:
+      context: ../services/to_feature_store_weather
+      dockerfile: Dockerfile
+    networks:
+      - redpanda_network
+    env_file:
+      - ../services/to_feature_store_weather/hist.env
+      - ../services/to_feature_store_weather/credentials.env
+    environment:
+      - KAFKA_BROKER_ADDRESS=redpanda:9092
+      - KAFKA_INPUT_TOPIC=weather_hist_${RUN_ID}
+      - KAFKA_CONSUMER_GROUP=weather_consumer_group_${RUN_ID}
+      - FEATURE_GROUP_NAME=weather_hist_feature_store
+    depends_on:
+      ingest_weather:
         condition: service_completed_successfully
