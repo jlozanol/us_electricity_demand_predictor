@@ -201,3 +201,4 @@ compose.local.yaml
 certificates/
 .quix.yaml.variables
 **/delete.py
+**.joblib

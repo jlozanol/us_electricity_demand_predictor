@@ -13,6 +13,8 @@ A service for ingesting hourly electricity demand data from different regions in
   - Net generation (NG)
 - Configurable multi-region data collection
 - Kafka integration using Redpanda
+- Automatic retries for failed API requests
+- Graceful shutdown handling with signal interception
 
 ## Prerequisites
 
@@ -22,15 +24,16 @@ A service for ingesting hourly electricity demand data from different regions in
 
 ## Installation
 
-1. Clone the repository
-2. Set up Python environment:
+1. Clone the repository.
+2. Set up the Python environment:
 
    ```bash
    pyenv install 3.12.9
    pyenv local 3.12.9
    ```
 
-3. Install dependencies using uv:
+3. Install dependencies using `uv`:
+
    ```bash
    uv pip install -r requirements.txt
    ```
@@ -56,15 +59,10 @@ The service supports the following regions:
 - CAR: Carolinas
 - CENT: Central
 - FLA: Florida
-- MIDA: Mid-Atlantic
 - MIDW: Midwest
-- NE: New England
 - NW: Northwest
 - NY: New York
-- SE: Southeast
 - SW: Southwest
-- TEN: Tennessee
-- TEX: Texas
 
 ## Running the Service
 
@@ -114,9 +112,28 @@ Where:
 - `ti`: Total interchange in megawatthours (MWh)
 - `ng`: Net generation in megawatthours (MWh)
 
+## Key Functions
+
+- **Data Ingestion**: Fetches electricity demand data from the EIA API for specified regions and time periods.
+- **Error Handling**: Implements retries for failed API requests and logs errors for debugging.
+- **Kafka Integration**: Publishes processed data to a Kafka topic for downstream processing.
+- **Graceful Shutdown**: Handles termination signals (`SIGINT`, `SIGTERM`) to ensure clean shutdown of the service.
+
 ## Dependencies
 
-- loguru: For logging
-- quixstreams: For Kafka integration
-- pydantic: For configuration management
-- requests: For API calls
+- `loguru`: For logging
+- `quixstreams`: For Kafka integration
+- `pydantic`: For configuration management
+- `requests`: For API calls
+
+## Development Notes
+
+- The service uses `loguru` for detailed logging, including retries and API errors.
+- The `LAST_N_DAYS` configuration determines the range of historical data to fetch in `historical` mode.
+- The `LIVE_OR_HISTORICAL` configuration toggles between live and historical data collection.
+
+## Future Enhancements
+
+- Add support for additional data types or regions.
+- Implement advanced error handling for Kafka publishing.
+- Add monitoring and alerting for data ingestion failures.
