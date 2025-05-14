@@ -55,7 +55,7 @@ class XGBoostModel:
 			best_hyperparams = self._find_best_hyperparams(
 				X, y, n_search_trials=n_search_trials, n_splits=n_splits
 			)
-			logger.info(f'Best hyperparameters: {best_hyperparams}')
+			logger.info(f'Best hyperparameters: {best_hyperparams}\n\n')
 
 			# we train the model with the best hyperparameters
 			self.model = XGBRegressor(**best_hyperparams)
@@ -152,5 +152,5 @@ class XGBoostModel:
 		logger.info(f'Running {n_search_trials} trials')
 		study.optimize(objective, n_trials=n_search_trials)
 
-		# we return the best hyperparameters
+		# We return the best hyperparameters
 		return study.best_trial.params

@@ -78,7 +78,6 @@ class ServicesCredentials(BaseSettings):
 	hopsworks_project_name: str
 	comet_api_key: str
 	comet_project_name: str
-	comet_workspace: str
 
 
 config = Config()
