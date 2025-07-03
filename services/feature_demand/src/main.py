@@ -3,6 +3,7 @@ from typing import Any, List, Optional, Tuple
 import signal
 import sys
 import time
+from pathlib import Path
 
 import holidays
 import numpy as np
@@ -13,7 +14,7 @@ from quixstreams import Application, State
 # Maximum number of hourly data points to keep in state (1 week of hourly data)
 MAX_WINDOW_IN_STATE = 168
 # Timeout in seconds to wait for new messages before shutting down in historical mode
-IDLE_TIMEOUT = 20
+IDLE_TIMEOUT = 20 #20
 
 # Add a global variable to track message processing
 last_message_time = 0
@@ -58,10 +59,6 @@ def update_window(data: dict, state: State) -> dict:
 	if len(all_data) > MAX_WINDOW_IN_STATE:
 		all_data.pop(0)
 
-	# Debug logging
-	# logger.debug(f'Number of candles in state for {data["region"]}: {len(all_data)}')
-	# logger.debug(f'Data: {all_data}')
-
 	# Update state
 	state.set('all_data', all_data)
 	return data  # Return the current data point, not the entire window
@@ -86,55 +83,39 @@ def compute_rolling_values(data: dict, state: State) -> dict:
 	Returns:
 		Data point enriched with statistical features
 	"""
-	all_data = state.get('all_data', [])
-
-	# Extract demand values from historical data
-	demand = np.array([d['demand'] for d in all_data if d['demand'] is not None])
-	values = {}
-
-	# Get current demand value to use as fallback
+	 # Get the demand history from state or initialize if it doesn't exist
+	demand_history = state.get('demand_history', [])
+	
+	# Create a copy of the list so we can modify it
+	demand_history = list(demand_history)
+	
+	# Append current demand value
 	current_demand = data.get('demand')
-
-	if len(demand) > 0:
-		# Basic statistics
-		values['full_mean'] = float(np.mean(demand))
-		values['full_median'] = float(np.median(demand))
-
-		# Last 3 hours statistics
-		last_3_demand = demand[-3:] if len(demand) >= 3 else demand
-		values['mean_3'] = float(np.mean(last_3_demand))
-		values['median_3'] = float(np.median(last_3_demand))
-
-		# Last 24 hours statistics
-		last_24_demand = demand[-24:] if len(demand) >= 24 else demand
-		values['mean_24'] = float(np.mean(last_24_demand))
-		values['median_24'] = float(np.median(last_24_demand))
-
-		# Lag features - use current demand as fallback instead of None
-		values['lag_1h'] = float(demand[-2]) if len(demand) >= 2 else current_demand
-		values['lag_24h'] = float(demand[-25]) if len(demand) >= 25 else current_demand
-		values['lag_168h'] = (
-			float(demand[-169]) if len(demand) >= 169 else current_demand
-		)
+	if current_demand is not None:
+		demand_history.append(current_demand)
+		
+		# Update state with set() method instead of direct assignment
+		state.set('demand_history', demand_history)
+		
+		values = {}
+		# Calculate statistics using the historical data
+		values.update({
+			'mean_3': float(np.mean(demand_history[-3:])) if len(demand_history) >= 3 else None,
+			'median_3': float(np.median(demand_history[-3:])) if len(demand_history) >= 3 else None,
+			'mean_24': float(np.mean(demand_history[-24:])) if len(demand_history) >= 24 else None,
+			'median_24': float(np.median(demand_history[-24:])) if len(demand_history) >= 24 else None,
+			'mean_168': float(np.mean(demand_history[-168:])) if len(demand_history) >= 168 else None,
+			'median_168': float(np.median(demand_history[-168:])) if len(demand_history) >= 168 else None,
+			'lag_1h': float(demand_history[-2]) if len(demand_history) >= 2 else None,
+			'lag_24h': float(demand_history[-25]) if len(demand_history) >= 25 else None,
+			'lag_168h': float(demand_history[-169]) if len(demand_history) >= 169 else None,
+			})
 	else:
-		# Default values when no historical data is available
-		# Use current demand for all lag features
-		for key in [
-			'full_mean',
-			'mean_3',
-			'mean_24',
-			'full_median',
-			'median_3',
-			'median_24',
-			'lag_1h',
-			'lag_24h',
-			'lag_168h',
-		]:
-			values[key] = current_demand
-
+		# Log error if no demand value is available
+		logger.error('No demand value available in current data point')
+	
 	# Combine with current data point
 	return {**data, **values}
-
 
 def add_time_data(value: dict) -> None:
 	"""
@@ -279,9 +260,41 @@ def main(
 		raise ValueError(
 			f"Invalid mode: {live_or_historical}. Must be 'live' or 'historical'"
 		)
+	
+def setup_logger() -> str:
+	"""
+	Configure loguru logger with both console and file handlers.
+	Console output includes colors, while file output is plain text.
+	Logs are rotated at 100MB and kept for 30 days.
+
+	Returns:
+		str: Path to the created log file
+	"""
+	# Generate filename with timestamp
+	log_filename = f'logs/feature_demand_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+
+	# Configure logger to write to both console and file
+	logger.remove()  # Remove default handler
+	logger.add(
+		sys.stderr,
+		format='<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>',
+	)
+	logger.add(
+		log_filename,
+		format='{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}',
+		rotation='100 MB',  # Create new file when current one reaches 100MB
+		retention='30 days',  # Keep logs for 30 days
+	)
+
+	logger.info(f'Starting new logging session. Logs will be saved to: {log_filename}')
+	return log_filename
 
 
 if __name__ == '__main__':
+	"""Main entry point of the application"""
+	# Create logs directory if it doesn't exist
+	Path('logs').mkdir(exist_ok=True)
+	setup_logger()
 	signal.signal(signal.SIGINT, signal_handler)
 	signal.signal(signal.SIGTERM, signal_handler)
 	main(

@@ -45,9 +45,8 @@ Create a `.env` file with the following variables:
 ```env
 KAFKA_BROKER_ADDRESS=your_kafka_broker
 KAFKA_TOPIC=your_topic_name
-REGION_NAMES=CAL,MIDA,NE  # Comma-separated list of regions
 LAST_N_DAYS=7
-LIVE_OR_HISTORICAL=live|historical
+LIVE_OR_HISTORICAL=live|historical # Only historical mode implemented
 ```
 
 ### Available Regions
@@ -55,33 +54,29 @@ LIVE_OR_HISTORICAL=live|historical
 The service supports the following regions (or cities, depending on the API):
 
 - CAL: California
-- MIDA: Mid-Atlantic
-- NE: New England
+- CAR: Carolinas
+- CENT: Central
+- FLA: Florida
+- MIDW: Midwest
+- NW: Northwest
 - NY: New York
-- TEX: Texas
-- Additional regions can be configured as needed.
-
-## Running the Service
+- SW: Southwest
 
 ### Development Mode
 
 ```bash
-# For live data collection
-make run-live-dev
 
 # For historical data collection
-make run-hist-dev
+make run-dev
 ```
 
 ### Docker Mode
 
 ```bash
-# For live data collection
-make run-live
-
 # For historical data collection
-make run-hist
+make run
 ```
+
 
 ## Data Format
 
@@ -129,6 +124,7 @@ Where:
 
 ## Future Enhancements
 
+- Seamesly integrate LIVE or HISTORICAL pipelines
 - Add support for additional weather attributes or regions.
 - Implement advanced error handling for Kafka publishing.
 - Add monitoring and alerting for data ingestion failures.

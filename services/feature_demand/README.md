@@ -33,24 +33,31 @@ The service uses a `config` module to load the following parameters:
 - `kafka_input_topic`: Name of the Kafka topic to read raw demand data from.
 - `kafka_output_topic`: Name of the Kafka topic to write enriched data to.
 - `kafka_consumer_group`: Kafka consumer group name.
-- `live_or_historical`: Mode of operation (`live` or `historical`).
+- `live_or_historical`: Mode of operation (`live` or `historical`). ** Only historical mode implemented currently **
 
 ## Usage
+
+
+## Configuration
+
+Create a `.env` file with the following variables:
+
+```env
+KAFKA_BROKER_ADDRESS=kafka_ip_address
+KAFKA_INPUT_TOPIC=your_kafka_input_topic
+KAFKA_OUTPUT_TOPIC=your_kafka_output_topic
+KAFKA_CONSUMER_GROUP=your_kafka_consumer_group
+LIVE_OR_HISTORICAL=historical  # Currently only historical implemented
+```
 
 ### Running the Service
 
 1. Ensure the required dependencies are installed.
-2. Configure the `config` module with the appropriate Kafka settings.
-3. Run the service:
+2. Run the service:
 
    ```bash
    python src/main.py
    ```
-
-### Modes of Operation
-
-- **Live Mode**: Processes data in real-time. (Currently not implemented in detail.)
-- **Historical Mode**: Processes historical data from the beginning of the Kafka topic.
 
 ### Key Functions
 
@@ -76,6 +83,7 @@ The service uses a `config` module to load the following parameters:
 
 ## Future Enhancements
 
+- Seamesly integrate LIVE or HISTORICAL pipelines
 - Implement detailed logic for live mode processing.
 - Add support for additional statistical features or custom feature engineering.
 - Improve configuration flexibility (e.g., via environment variables).

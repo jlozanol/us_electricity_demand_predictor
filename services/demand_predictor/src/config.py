@@ -1,4 +1,4 @@
-from typing import ClassVar, List, Optional, Literal
+from typing import List, Optional, Literal
 
 from pydantic import field_validator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,8 +28,8 @@ class Config(BaseSettings):
 	demand_feat_group_version: Optional[str] = None
 	weather_feat_group_name: Optional[str] = None
 	weather_feat_group_version: Optional[str] = None
-	hyperparameter_tuning: bool = None
 	region_names: List[str] = None
+	debug_mode: bool = False
 	days_back: Optional[int] = None
 	hyperparameter_tuning_search_trials: Optional[int] = Field(
 		default=0,
@@ -39,24 +39,11 @@ class Config(BaseSettings):
 		default=4,
 		description='The number of splits to perform for hyperparameter tuning',
 	)
-
 	# model registry
 	model_status: Literal['Development', 'Staging', 'Production'] = Field(
 		default='Development',
 		description='The status of the model in the model registry',
 	)
-
-
-	region_timezones: ClassVar[dict] = {
-		'CAL': 'America/Los_Angeles',  # California
-		'CAR': 'America/New_York',  # Carolinas
-		'CENT': 'America/Chicago',  # Central
-		'FLA': 'America/New_York',  # Florida
-		'MIDW': 'America/Chicago',  # Midwest
-		'NW': 'America/Los_Angeles',  # Northwest
-		'NY': 'America/New_York',  # New York
-		'SW': 'America/Phoenix',  # Southwest
-	}
 
 	@field_validator('region_names')
 	@classmethod

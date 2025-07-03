@@ -2,7 +2,6 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Tuple
 
 import requests
 from config import api_credentials, config
@@ -430,32 +429,6 @@ def convert_datestring_to_ms(
 	timestamp_ms = int(dt.timestamp() * 1000)
 
 	return timestamp_ms
-
-
-def get_data(
-	last_n_days: int,
-	region_name: str,
-) -> Tuple[list, list]:
-	"""
-	Gets the latest electricity demand data from the EIA API.
-
-	Args:
-		last_n_days (int): The number of days to fetch data for.
-		region_name (str): The name of the region to fetch data for.
-
-	Returns:
-		Tuple[list, list]: A tuple containing two lists:
-			1. A list of dictionaries containing the electricity demand data.
-			2. A list of dictionaries containing the electricity day-ahead forecast data.
-	"""
-
-	# Get EIA API data for the specified date range
-	# start_day, end_day: dates in YYYY-MM-DDT00 format
-	# D_data: actual demand, DF_data: day-ahead forecast
-	start_day, end_day = time_to_string(last_n_days)
-	data = connect_api(start_day, end_day, region_name)
-
-	return data
 
 
 def convert_to_feature(list_of_dicts: list) -> list:

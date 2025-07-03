@@ -1,5 +1,6 @@
+MODE=True
 run-dev:
-	clear && uv run --active python src/main.py
+	clear && DEBUG_MODE=$(MODE) uv run --active python src/main.py
 
 build:
 	docker build -f Dockerfile -t demand-predictor .
@@ -15,3 +16,9 @@ lint:
 
 format:
 	ruff format .
+
+reset-venv:
+	uv clean
+	rm -rf .venv
+	rm uv.lock
+	uv sync

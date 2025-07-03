@@ -200,5 +200,7 @@ compose.local.yaml
 .venv/
 certificates/
 .quix.yaml.variables
-**/delete.py
+**/delete*.py
 **.joblib
+files
+model_artifacts/

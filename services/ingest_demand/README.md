@@ -48,7 +48,7 @@ KAFKA_BROKER_ADDRESS=your_kafka_broker
 KAFKA_TOPIC=your_topic_name
 REGION_NAMES=CAL,MIDA,NE  # Comma-separated list of regions
 LAST_N_DAYS=7
-LIVE_OR_HISTORICAL=live|historical
+LIVE_OR_HISTORICAL=live|historical # Currently only historical mode implemented
 ```
 
 ### Available Regions
@@ -69,21 +69,16 @@ The service supports the following regions:
 ### Development Mode
 
 ```bash
-# For live data collection
-make run-live-dev
 
 # For historical data collection
-make run-hist-dev
+make run-dev
 ```
 
 ### Docker Mode
 
 ```bash
-# For live data collection
-make run-live
-
 # For historical data collection
-make run-hist
+make run
 ```
 
 ## Data Format
@@ -130,10 +125,11 @@ Where:
 
 - The service uses `loguru` for detailed logging, including retries and API errors.
 - The `LAST_N_DAYS` configuration determines the range of historical data to fetch in `historical` mode.
-- The `LIVE_OR_HISTORICAL` configuration toggles between live and historical data collection.
+- The `LIVE_OR_HISTORICAL` configuration toggles between live and historical data collection. ** NOT YET IMPLEMENTED **
 
 ## Future Enhancements
 
+- Seamesly integrate LIVE or HISTORICAL pipelines
 - Add support for additional data types or regions.
 - Implement advanced error handling for Kafka publishing.
 - Add monitoring and alerting for data ingestion failures.
