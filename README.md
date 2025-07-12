@@ -70,19 +70,19 @@ This project adopts a **three-pipeline architecture**, promoting modularity, mai
                       |                             |
                       | Kafka                       | Kafka
                       v                             v
-           +--------------------+        +----------------------+
+           +--------------------+        +-------------------------+
            | feature_demand     |        | to_featurestore_weather |
-           +--------------------+        +----------------------+
+           +--------------------+        +-------------------------+
                       |                             |
                       | Kafka                       |
                       v                             |
          +-------------------------+                |
-         | to_featurestore_demand  |<---------------+
-         +-------------------------+
-                      |
-                      v
-         +--------------------------+
-         |  Hopsworks Feature Store |
+         | to_featurestore_demand  |                |
+         +-------------------------+                |
+                      |                             |
+                      v                             |
+         +--------------------------+               |
+         |  Hopsworks Feature Store |<--------------+
          +--------------------------+
                       |
                       v
