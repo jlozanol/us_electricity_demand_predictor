@@ -60,7 +60,7 @@ This project adopts a **three-pipeline architecture**, promoting modularity, mai
 
 ```plaintext
             +---------------------+         +----------------------+
-            |   EIA API          |         |   Open-Meteo API     |
+            |   EIA API           |         |   Open-Meteo API     |
             +---------------------+         +----------------------+
                       |                             |
                       v                             v
