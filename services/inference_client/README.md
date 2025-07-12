@@ -1,129 +1,119 @@
-# US Electricity ML Training
+# Forecasting and Visualization Pipeline (Streamlit App)
 
-A machine learning pipeline for predicting electricity demand across various US regions, based on data from the U.S. Energy Information Administration (EIA). The project includes automated data processing, model artifact retrieval from a model registry, and an interactive Streamlit dashboard for real-time visualization and analysis.
+This project provides a modular pipeline for generating features, retrieving machine learning models, making time series predictions, and visualizing outputs through an interactive **Streamlit** interface.
 
-## Features
+---
 
-- **Regional Electricity Forecasting**: Predict electricity demand for different US regions
-- **Automated Feature Engineering**: Transform raw electricity data into ML-ready features
-- **XGBoost Integration**: Uses gradient boosting for accurate predictions
-- **Interactive Dashboard**: Streamlit web application for data visualization
-- **Flexible Architecture**: Modular design for easy extension and customization
-
-## Project Structure
+## 📁 Project Structure
 
 ```
-├── src/
-│   ├── main.py              # Main pipeline and Streamlit app entry point
-│   ├── config.py            # Configuration parameters for the main pipeline
-│   ├── feature_creator.py   # Feature engineering utilities
-│   ├── model_fetcher.py     # Model configuration and instantiation
-│   └── plots.py             # Visualization and plotting functions
-│   ├── models
-│       ├── xgboost_model.py # Computation of the predicted electricity demand
-├── model_artifacts/                  # Saved model artifacts
-└── README.md
+.
+├── main.py              # Streamlit app entry point
+├── config.py            # Configuration variables and constants
+├── feature_creator.py   # Feature engineering for model inputs
+├── model_fetcher.py     # Downloads pre-trained models (e.g., from Comet ML)
+├── utils.py             # Utility functions for preprocessing and formatting
+├── plots.py             # Visualization routines for prediction outputs
 ```
 
-## Quick Start
+---
 
-### Prerequisites
+## 🧩 Module Overview
 
-- Python 3.8+
-- Required packages (see Installation)
+### `main.py`
+Streamlit application entry point. It:
+- Loads app configuration.
+- Retrieves a trained model for a selected region.
+- Builds features from input data.
+- Generates predictions.
+- Displays results with visualizations and metrics.
 
-### Installation
+### `config.py`
+Contains shared configuration:
+- File paths
+- API credentials
+- Region and model mappings
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd us-electricity-ml-predictions
-   ```
+### `feature_creator.py`
+Encapsulates the logic for transforming raw input into model-ready features, including:
+- Time-based features (hour, weekday)
+- Lag and rolling statistics
+- Weather data integration (if configured)
 
-2. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-   
-   Or install manually:
-   ```bash
-   pip install streamlit pandas scikit-learn xgboost matplotlib seaborn numpy
-   ```
+### `model_fetcher.py`
+Handles the loading of machine learning models from Comet ML.
 
-## Configuration
+### `utils.py`
+General-purpose utility functions, such as:
+- Timestamp conversion
+- File handling
+- Display helpers
 
-Create a `.env` file with the following variables:
+### `plots.py`
+Creates charts to visualize predictions and feature trends. Used within the Streamlit interface.
 
-```env
-REGION_NAMES=["CAL", "CAR", "CENT", "FLA", "MIDW", "NW", "NY", "SW"]
-MODEL_STATUS=Production
-HOURS_BACK=450
-```
+---
 
-Create a `credentials.env` file with the following variables:
+## 🚀 Running the Streamlit App
 
-```credentials.env
-COMET_API_KEY=your_comet_api_key
-COMET_PROJECT_NAME=your_comet_project_name
-COMET_WORKSPACE=your_comet_workspace_name
-EIA_API_KEY=your_eia_api_key
-```
+To launch the app locally:
 
-### Running the Application
-
-**Launch the Streamlit dashboard:**
 ```bash
-streamlit run src/main.py
+streamlit run main.py
 ```
 
-The application will open in your browser at `http://localhost:8501`
+> 📌 Make sure your environment is activated and all dependencies are installed.
 
-## Usage
+---
 
-### Interactive Dashboard
+## 📦 Requirements
 
-The Streamlit dashboard provides a comprehensive interface for electricity demand forecasting and analysis:
+This app relies on the following Python packages (among others):
 
-**Data Integration**
-- **Automated Model Loading**: Downloads and loads pre-trained XGBoost models from the model registry
-- **Real-time Data Fetching**: Queries the latest electricity and weather data from multiple sources:
-  - **EIA API**: Historical and current electricity consumption data across US regions
-  - **OpenMeteo API**: Current and forecasted weather conditions for corresponding regions
-- **Data Synchronization**: Automatically aligns electricity and weather data by timestamp and region
+- `streamlit`
+- `pandas`
+- `numpy`
+- `matplotlib` or `plotly`
+- `scikit-learn`
+- `comet_ml` (if using model tracking)
 
-**Prediction & Analysis**
-- **On-demand Forecasting**: Generates electricity demand predictions using the latest available data
-- **Multi-source Comparison**: Enables side-by-side analysis of:
-  - **Actual consumption** (historical EIA data)
-  - **Official EIA forecasts** (when available)
-  - **ML model predictions** (XGBoost-generated forecasts)
+You can install the dependencies with:
 
-**Visualization & Interaction**
-- **Regional Selection**: Interactive dropdown to choose specific US electricity regions
-- **Comparative Plotting**: Dynamic charts showing actual vs. predicted vs. official forecasts
+```bash
+pip install -r requirements.txt
+```
 
-## Data Requirements
+Or manually:
 
-The model expects electricity data with:
-- Timestamp information
-- Regional identifiers
-- Historical electricity demand/consumption values acquired from EIA's API
-- Weather data, acquired from openmeteo's API
+```bash
+pip install streamlit pandas numpy matplotlib scikit-learn comet_ml
+```
 
-## API Configuration
-The application handles data acquisition automatically, but requires:
+---
 
-- EIA API Key: Free registration at EIA.gov
-- OpenMeteo Access: No key required for standard usage limits
-- Internet Connection: For real-time data fetching and model updates
+## 📌 Notes
 
+- Ensure your configuration in `config.py` is correct (especially for file paths and API credentials).
+- The application is modular and supports multiple **regions** with corresponding ML models.
+- Designed to support real-time or near-real-time prediction pipelines via interactive input and visualization.
 
+---
 
-## Contributing
+## Future Enhancements
 
-We welcome contributions! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request with clear descriptions
+- 📦 Add batching and backpressure support.
+- 🧪 Add schema validation for incoming messages.
+- 🚀 Add inference pipeline integration for end-to-end deployment.
+- 🔧 Make transformations configurable (e.g., via YAML or JSON files).
 
-For bug reports or feature requests, please open an issue.
+---
+
+## License
+
+MIT License
+
+---
+
+## Contact
+
+For issues or collaboration, contact: `jlozanol@protonmail.com`

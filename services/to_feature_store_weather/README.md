@@ -1,118 +1,145 @@
 # US Electricity Weather Feature Store
 
-A service for transforming enriched weather data and storing it in a feature store for downstream machine learning applications. The service reads data from a Kafka topic, processes it, and writes it to a feature store.
+A streaming microservice for transforming enriched weather data and storing it in **Hopsworks** Feature Store for downstream machine learning applications. It ingests data from a Kafka topic, performs time-based feature engineering, and writes region-specific data into Hopsworks.
 
 ## Features
 
-- Integration with Kafka for real-time weather data ingestion
-- Transformation of enriched weather data into feature store-ready format
-- Configurable feature retention policies
-- Graceful shutdown handling with signal interception
+- ✅ Real-time ingestion of enriched weather data via Kafka
+- ✅ Time-based and cyclic feature transformations (e.g., hour, day of week, month)
+- ✅ Seamless integration with Hopsworks Feature Store
+- ✅ Environment-based configuration using `.env` and `pydantic`
+- ✅ Graceful shutdown handling (`SIGINT`, `SIGTERM`)
+
+
+Each message is parsed, enriched with cyclic and temporal features, and written into a Hopsworks feature group with support for historical or live data labeling.
 
 ## Prerequisites
 
 - Python 3.12.9
-- Kafka
-- Feature store backend (e.g., Redis, DynamoDB, or other supported systems)
+- Access to [Hopsworks](https://www.hopsworks.ai/)
+- Kafka (broker and topic configured)
 
 ## Installation
 
-1. Clone the repository.
-2. Set up the Python environment:
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/your-org/weather-feature-store.git
+   cd weather-feature-store
+   ```
+
+2. Set up Python environment (recommended: `pyenv` + `uv`):
 
    ```bash
    pyenv install 3.12.9
    pyenv local 3.12.9
-   ```
-
-3. Install dependencies using `uv`:
-
-   ```bash
    uv pip install -r requirements.txt
    ```
 
 ## Configuration
 
-Create a `.env` file with the following variables:
+Create a `.env` file in the root directory with the following keys:
 
 ```env
 KAFKA_BROKER_ADDRESS=your_kafka_broker
-KAFKA_INPUT_TOPIC=your_input_topic_name
-KAFKA_CONSUMER_GROUP=your_kafka_consumer_group
-FEATURE_GROUP_NAME=hopsworks_feature_group
-FEATURE_GROUP_VERSION=hopsworks_feature_group_version
-FEATURE_GROUP_PRIMARY_KEYS=your_primary_key
+KAFKA_INPUT_TOPIC=your_input_topic
+KAFKA_CONSUMER_GROUP=your_consumer_group
+
+FEATURE_GROUP_NAME=weather_features
+FEATURE_GROUP_VERSION=1
+FEATURE_GROUP_PRIMARY_KEYS=region
 FEATURE_GROUP_EVENT_TIME=timestamp_ms
-LIVE_OR_HISTORICAL=historical_or_live
+
+LIVE_OR_HISTORICAL=live
 ```
+
+You must also be authenticated to your Hopsworks instance (e.g., via API key or CLI login).
 
 ## Running the Service
 
 ### Development Mode
 
 ```bash
-# Run the service in development mode
 make run-dev
 ```
 
 ### Docker Mode
 
 ```bash
-# Run the service in Docker
 make run
 ```
 
 ## Data Format
 
-The service processes and stores data in the following format:
+Expected input format (Kafka message):
 
 ```json
 {
-  "region": "REGION_CODE",
-  "timestamp_ms": 1234567890000,
-  "features": {
-    "temperature": 25.0,
-    "humidity": 60.0,
-    "wind_speed": 5.0,
-    "precipitation": 0.0,
-    "hour_sin": 0.5,
-    "hour_cos": -0.5,
-    "day_of_week_sin": 0.866,
-    "day_of_week_cos": 0.5,
-    "month_sin": 0.707,
-    "month_cos": 0.707
-  }
+  "region": "CAL",
+  "timestamp_ms": 1720483200000,
+  "temperature": 27.5,
+  "humidity": 55.0,
+  "wind_speed": 4.1,
+  "precipitation": 0.0
 }
 ```
 
-Where:
+After transformation, the following features are derived and stored:
 
-- `region`: Regional identifier (e.g., CAL, MIDA)
-- `timestamp_ms`: Unix timestamp in milliseconds
-- `features`: Dictionary of computed weather features for the given timestamp and region
+```json
+{
+  "region": "CAL",
+  "timestamp_ms": 1720483200000,
+  "temperature": 27.5,
+  "humidity": 55.0,
+  "wind_speed": 4.1,
+  "precipitation": 0.0,
+  "hour_sin": 0.5,
+  "hour_cos": -0.5,
+  "day_of_week_sin": 0.866,
+  "day_of_week_cos": 0.5,
+  "month_sin": 0.707,
+  "month_cos": 0.707
+}
+```
 
-## Key Functions
+## Code Structure
 
-- **Kafka Integration**: Reads enriched weather data from a Kafka topic.
-- **Feature Transformation**: Converts enriched data into a format suitable for the feature store.
-- **Feature Store Integration**: Writes transformed data to the configured feature store backend.
-- **Graceful Shutdown**: Handles termination signals (`SIGINT`, `SIGTERM`) to ensure clean shutdown of the service.
+- `main.py`: Service entry point and Kafka stream setup
+- `sinks.py`: Handles transformation and writing to Hopsworks
+- `config.py`: Defines and loads environment variables using `pydantic`
 
 ## Dependencies
 
-- `loguru`: For logging
-- `quixstreams`: For Kafka integration
-- `pydantic`: For configuration management
-- `hopsworks`: Feature store
+- `hopsworks`: Python SDK for writing to Hopsworks
+- `loguru`: Structured logging
+- `quixstreams`: Kafka client for real-time ingestion
+- `pydantic`: Environment variable management and validation
 
-## Development Notes
+## Graceful Shutdown
 
-- The service uses `loguru` for detailed logging, including feature transformation and storage errors.
-- The `FEATURE_STORE_BACKEND` configuration determines the feature store system to use.
-- The service is designed to be extendable for additional feature store backends.
+The service handles `SIGINT` and `SIGTERM` signals to cleanly stop Kafka consumers and ensure data is flushed to Hopsworks before shutdown.
+
+## Notes
+
+- Only **Hopsworks** is supported as the feature store — other systems are not configured or supported in this implementation.
+- The `LIVE_OR_HISTORICAL` flag tags features to indicate whether they are part of a real-time or backfill pipeline.
 
 ## Future Enhancements
 
-- Add support for additional weather attributes or regions.
-- Implement advanced error handling for feature store writes.
-- Add monitoring and alerting for feature ingestion failures.
+- Support additional weather attributes (e.g., solar radiation, snow depth)
+- Expand region coverage and multi-topic handling
+- Add metrics and monitoring for ingestion performance and feature freshness
+- Enhance error handling and retry logic for Hopsworks failures
+
+---
+
+## License
+
+MIT License
+
+---
+
+## Contact
+
+For issues or collaboration, contact: `jlozanol@protonmail.com`

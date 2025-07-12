@@ -1,38 +1,48 @@
 # US Electricity Demand Feature Store
 
-A service for transforming enriched electricity demand data and storing it in a feature store for downstream machine learning applications. The service reads data from a Kafka topic, processes it, and writes it to a feature store.
+A Python service for ingesting, processing, and storing enriched U.S. electricity demand data in a feature store. This system is designed for real-time machine learning pipelines, using Kafka for data ingestion and supporting extensible feature store backends.
 
-## Features
+---
 
-- Integration with Kafka for real-time data ingestion
-- Enriched demand data into feature store-ready format
-- Graceful shutdown handling with signal interception
+## 🚀 Features
 
-## Prerequisites
+- Real-time ingestion via Kafka
+- Feature engineering and enrichment of electricity demand data
+- Writes to a feature store (Hopsworks)
+- Signal-based graceful shutdown for reliability
+- Modular and configurable via environment variables
+
+---
+
+## 📦 Prerequisites
 
 - Python 3.12.9
-- Kafka
-- hopsworks feature store
+- Kafka broker instance
+- Feature store backend (e.g., Hopsworks, Redis, or DynamoDB)
+- `make`, `uv`, and optionally Docker
 
-## Installation
+---
 
-1. Clone the repository.
-2. Set up the Python environment:
+## 🛠️ Installation
 
-   ```bash
-   pyenv install 3.12.9
-   pyenv local 3.12.9
-   ```
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd <project-directory>
 
-3. Install dependencies using `uv`:
+# Set Python version
+pyenv install 3.12.9
+pyenv local 3.12.9
 
-   ```bash
-   uv pip install -r requirements.txt
-   ```
+# Install dependencies with uv
+uv pip install -r requirements.txt
+```
 
-## Configuration
+---
 
-Create a `.env` file with the following variables:
+## ⚙️ Configuration
+
+Create a `.env` file in the root directory with the following keys:
 
 ```env
 KAFKA_BROKER_ADDRESS=your_kafka_broker
@@ -42,28 +52,31 @@ FEATURE_GROUP_NAME=hopsworks_feature_group
 FEATURE_GROUP_VERSION=hopsworks_feature_group_version
 FEATURE_GROUP_PRIMARY_KEYS=your_primary_key
 FEATURE_GROUP_EVENT_TIME=timestamp_ms
-LIVE_OR_HISTORICAL=historical_or_live
+FEATURE_STORE_BACKEND=hopsworks|redis|dynamodb
+LIVE_OR_HISTORICAL=live|historical
 ```
 
-## Running the Service
+---
+
+## ▶️ Running the Service
 
 ### Development Mode
 
 ```bash
-# Run the service in development mode
 make run-dev
 ```
 
 ### Docker Mode
 
 ```bash
-# Run the service in Docker
 make run
 ```
 
-## Data Format
+---
 
-The service processes and stores data in the following format:
+## 📄 Data Format
+
+Each record must follow the format:
 
 ```json
 {
@@ -83,32 +96,64 @@ The service processes and stores data in the following format:
 ```
 
 Where:
-
-- `region`: Regional identifier (e.g., CAL, MIDA)
+- `region`: Regional code (e.g., CAL, MIDA)
 - `timestamp_ms`: Unix timestamp in milliseconds
-- `features`: Dictionary of computed features for the given timestamp and region
+- `features`: Dictionary of engineered features
 
-## Key Functions
+---
 
-- **Kafka Integration**: Reads enriched demand data from a Kafka topic.
-- **Feature Store Integration**: Writes transformed data to the configured feature store backend.
-- **Graceful Shutdown**: Handles termination signals (`SIGINT`, `SIGTERM`) to ensure clean shutdown of the service.
+## 🧩 Architecture
 
-## Dependencies
+### `main.py`
+- Sets up and runs the Kafka stream processing pipeline.
+- Handles signal-based shutdown.
 
-- `loguru`: For logging
-- `quixstreams`: For Kafka integration
-- `pydantic`: For configuration management
-- Feature store-specific libraries (e.g., `redis`, `boto3` for DynamoDB)
+### `sinks.py`
+- Defines sink classes for different feature store backends.
+- Implements `write_to_store()` method based on the backend.
 
-## Development Notes
+### `config.py`
+- Loads configuration from environment variables using Pydantic.
 
-- The service uses `loguru` for detailed logging, including feature transformation and storage errors.
-- The `FEATURE_STORE_BACKEND` configuration determines the feature store system to use.
-- The service is designed to be extendable for additional feature store backends.
+---
 
-## Future Enhancements
+## 📚 Dependencies
 
-- Add support for additional feature store backends.
-- Implement advanced error handling for feature store writes.
-- Add monitoring and alerting for feature ingestion failures.
+- [`loguru`](https://github.com/Delgan/loguru) – Structured logging
+- [`quixstreams`](https://github.com/quixio/quix-streams) – Kafka streaming
+- [`pydantic`](https://docs.pydantic.dev) – Configuration and validation
+- [`hopsworks`](https://github.com/logicalclocks/hopsworks) feature store client
+
+---
+
+## 🧪 Development Notes
+
+- Use `make run-dev` to test changes locally.
+- Extend the `Sink` class in `sinks.py` to support new feature store targets.
+- Add unit tests (suggested improvement) to validate sink behavior and stream transformations.
+
+---
+
+## 🔮 Future Enhancements
+
+- Add retry and error logging for feature store writes
+- Implement monitoring and alerting for failed ingestions
+- Extend support for other messaging platforms (e.g., Pulsar)
+
+---
+
+## 🧼 Graceful Shutdown
+
+The service listens for termination signals (`SIGINT`, `SIGTERM`) and ensures a clean shutdown of Kafka consumers and resource deallocation.
+
+---
+
+## License
+
+MIT License
+
+---
+
+## Contact
+
+For issues or collaboration, contact: `jlozanol@protonmail.com`

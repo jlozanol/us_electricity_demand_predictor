@@ -2,88 +2,140 @@
 
 ## Overview
 
-The `feature_demand` service processes electricity demand data from Kafka, generates enriched features, and outputs the processed data to another Kafka topic. It supports both live and historical processing modes.
+The service `feature_demand` processes electricity demand data streamed via Kafka. It performs real-time or batch (historical) feature engineering to enrich the data for downstream modeling or analytics.
+
+> ✅ Currently, only **historical mode** is implemented.
+
+---
 
 ## Features
 
-- **Time-based Feature Engineering**: Adds cyclical encodings for hour, day of the week, and month, along with holiday indicators and hour categorization.
-- **Sliding Window Management**: Maintains a historical sliding window of data points for statistical computations.
-- **Statistical Feature Computation**: Computes rolling statistics (mean, median) and lag features for demand data.
-- **Inactivity Handling**: Automatically shuts down in historical mode if no messages are received for a configurable timeout period.
+- ⏱️ **Time-based Feature Engineering**
+  - Cyclical encoding of hour, day of week, and month.
+  - Holiday and weekend flags.
+  - Hour-of-day categorization (e.g., morning, peak hours).
 
-## File Structure
+- 📊 **Sliding Window & Statistical Features**
+  - Maintains a rolling window of historical demand data.
+  - Computes rolling mean, median, and lag features.
 
-- `src/main.py`: Main script containing the feature engineering logic and Kafka integration.
+- ⚠️ **Inactivity Handling (Historical Mode)**
+  - Automatically stops if no messages are received for a configurable idle timeout.
 
-## Requirements
+- ⚙️ **Kafka Integration**
+  - Streams data from an input topic, enriches it, and publishes to an output topic.
 
-- Python 3.12.9
-- Kafka
-- Required Python libraries:
-  - `numpy`
-  - `holidays`
-  - `loguru`
-  - `quixstreams`
+---
 
-## Configuration
+## Project Structure
 
-The service uses a `config` module to load the following parameters:
-
-- `kafka_broker_address`: Address of the Kafka broker.
-- `kafka_input_topic`: Name of the Kafka topic to read raw demand data from.
-- `kafka_output_topic`: Name of the Kafka topic to write enriched data to.
-- `kafka_consumer_group`: Kafka consumer group name.
-- `live_or_historical`: Mode of operation (`live` or `historical`). ** Only historical mode implemented currently **
-
-## Usage
-
-
-## Configuration
-
-Create a `.env` file with the following variables:
-
-```env
-KAFKA_BROKER_ADDRESS=kafka_ip_address
-KAFKA_INPUT_TOPIC=your_kafka_input_topic
-KAFKA_OUTPUT_TOPIC=your_kafka_output_topic
-KAFKA_CONSUMER_GROUP=your_kafka_consumer_group
-LIVE_OR_HISTORICAL=historical  # Currently only historical implemented
+```plaintext
+src/
+├── config.py       # Configuration loader (env-based)
+└── main.py         # Main logic: Kafka consumption, feature engineering, streaming
 ```
 
-### Running the Service
+---
 
-1. Ensure the required dependencies are installed.
-2. Run the service:
+## Installation & Requirements
 
-   ```bash
-   python src/main.py
-   ```
+- Python 3.12.9
+- Kafka cluster or broker
+- Required Python libraries:
 
-### Key Functions
+```bash
+pip install numpy holidays loguru quixstreams
+```
 
-- `add_time_data`: Adds time-based features to each data point.
-- `update_window`: Maintains a sliding window of historical data points.
-- `compute_rolling_values`: Computes statistical features from the sliding window.
-- `check_inactivity`: Monitors inactivity and shuts down the service if no messages are received for a specified timeout.
+You can also create a `requirements.txt` with:
+
+```txt
+numpy
+holidays
+loguru
+quixstreams
+```
+
+---
+
+## Configuration
+
+The service reads Kafka and pipeline settings from environment variables. Create a `.env` file in the root directory with the following:
+
+```env
+KAFKA_BROKER_ADDRESS=your_kafka_broker_ip
+KAFKA_INPUT_TOPIC=raw_demand_topic
+KAFKA_OUTPUT_TOPIC=processed_demand_topic
+KAFKA_CONSUMER_GROUP=feature_demand_consumer
+LIVE_OR_HISTORICAL=historical  # Only 'historical' supported at the moment
+```
+
+---
+
+## Running the Service
+
+1. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+2. Start the feature demand processor:
+
+```bash
+python src/main.py
+```
+
+---
+
+## Core Functions
+
+| Function | Description |
+|----------|-------------|
+| `add_time_data(df)` | Adds time-based features (hour, weekday, holiday, cyclical encodings). |
+| `update_window(key, df, window_data)` | Maintains and updates a sliding window of recent demand values for each key. |
+| `compute_rolling_values(df, window_data)` | Computes rolling statistics (mean, median, lag) for each data point. |
+| `check_inactivity(last_msg_time)` | Shuts down the service if no new messages are received within a timeout window. |
+
+---
 
 ## Example Workflow
 
-1. **Input**: Raw demand data from the Kafka input topic.
+1. **Input**: Raw hourly demand data (timestamp + value) from Kafka input topic.
 2. **Processing**:
-   - Add time-based features.
-   - Maintain a sliding window of historical data.
-   - Compute rolling statistics and lag features.
-3. **Output**: Enriched data is sent to the Kafka output topic.
+   - Adds timestamp-derived features.
+   - Tracks demand history per region.
+   - Computes statistical summaries (rolling mean, lag).
+3. **Output**: Enriched demand data written to the Kafka output topic.
+
+---
 
 ## Development Notes
 
-- The service uses `loguru` for logging and `quixstreams` for Kafka integration.
-- The `MAX_WINDOW_IN_STATE` constant defines the maximum number of hourly data points to retain in the sliding window (default: 168 hours or 1 week).
-- The `IDLE_TIMEOUT` constant specifies the inactivity timeout in seconds (default: 20 seconds).
+- Uses `loguru` for structured logging.
+- Uses `quixstreams` for Kafka message streaming.
+- Constants:
+  - `MAX_WINDOW_IN_STATE = 168` → max hours of demand history (7 days).
+  - `IDLE_TIMEOUT = 20` → service timeout if no data received (in seconds).
+- Region ID is derived from the `tag` field of each input message.
+
+---
 
 ## Future Enhancements
 
-- Seamesly integrate LIVE or HISTORICAL pipelines
-- Implement detailed logic for live mode processing.
-- Add support for additional statistical features or custom feature engineering.
-- Improve configuration flexibility (e.g., via environment variables).
+- ⚡ Add full support for **live** mode streaming.
+- 🧠 Expand statistical features (e.g., standard deviation, trend detection).
+- 🛠️ Add CLI interface or REST hooks for better monitoring and control.
+- 🔧 Make configuration more flexible (e.g., config file or argument parsing).
+
+---
+
+## License
+
+MIT License
+
+---
+
+## Contact
+
+For issues or collaboration, contact: `jlozanol@protonmail.com`

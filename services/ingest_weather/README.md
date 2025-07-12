@@ -1,38 +1,37 @@
 # US Electricity Weather Data Ingestor
 
-A service for ingesting weather data relevant to electricity demand forecasting. The service fetches weather data from a weather API, processes it, and publishes the data to a Kafka topic. It supports both live and historical data collection.
+This service `demand_predictor` ingests historical weather data relevant to electricity demand forecasting. It fetches weather data via Open-Meteo API and publishes structured data to a Kafka topic using Quix Streams. The project is designed to be modular, fault-tolerant, and configurable by region and time range.
 
 ## Features
 
-- Real-time weather data ingestion
-- Historical weather data batch processing
+- Historical weather data ingestion
 - Support for multiple weather attributes:
   - Temperature
   - Humidity
   - Wind speed
   - Precipitation
-- Configurable multi-region data collection
-- Kafka integration using Redpanda
-- Automatic retries for failed API requests
-- Graceful shutdown handling with signal interception
+- Configurable region-based data collection
+- Kafka integration via Redpanda (through Quix Streams)
+- Automatic retry logic with exponential backoff for failed API calls
+- Graceful shutdown using signal interception (`SIGINT`, `SIGTERM`)
+- Logging with `loguru`
 
 ## Prerequisites
 
 - Python 3.12.9
-- Docker (for Redpanda)
-- Weather API key (obtain from your preferred weather API provider)
+- Docker (for Redpanda broker)
+- Open-Meteo API (no key required)
 
 ## Installation
 
-1. Clone the repository.
-2. Set up the Python environment:
+1. Clone the repository and set up the Python environment:
 
    ```bash
    pyenv install 3.12.9
    pyenv local 3.12.9
    ```
 
-3. Install dependencies using `uv`:
+2. Install dependencies using `uv`:
 
    ```bash
    uv pip install -r requirements.txt
@@ -46,12 +45,14 @@ Create a `.env` file with the following variables:
 KAFKA_BROKER_ADDRESS=your_kafka_broker
 KAFKA_TOPIC=your_topic_name
 LAST_N_DAYS=7
-LIVE_OR_HISTORICAL=live|historical # Only historical mode implemented
+LIVE_OR_HISTORICAL=historical
 ```
 
-### Available Regions
+> Note: Currently only `historical` mode is implemented.
 
-The service supports the following regions (or cities, depending on the API):
+### Regions Supported
+
+The service supports region names mapped to geographical coordinates, configured in `config.py`:
 
 - CAL: California
 - CAR: Carolinas
@@ -62,69 +63,75 @@ The service supports the following regions (or cities, depending on the API):
 - NY: New York
 - SW: Southwest
 
+## Running the Service
+
 ### Development Mode
 
 ```bash
-
-# For historical data collection
 make run-dev
 ```
 
 ### Docker Mode
 
 ```bash
-# For historical data collection
 make run
 ```
 
+## Output Data Format
 
-## Data Format
-
-The service processes and publishes data in the following format:
+Each published message conforms to the following structure:
 
 ```json
 {
-  "timestamp_ms": 1234567890000,
-  "region": "REGION_CODE",
-  "temperature": 25.0,
-  "humidity": 60.0,
-  "wind_speed": 5.0,
+  "timestamp_ms": 1627857600000,
+  "region": "CAL",
+  "temperature": 27.3,
+  "humidity": 55.4,
+  "wind_speed": 3.1,
   "precipitation": 0.0
 }
 ```
 
-Where:
-
 - `timestamp_ms`: Unix timestamp in milliseconds
-- `region`: Regional identifier (e.g., CAL, MIDA)
-- `temperature`: Temperature in degrees Celsius
-- `humidity`: Humidity percentage
-- `wind_speed`: Wind speed in meters per second
-- `precipitation`: Precipitation in millimeters
+- `region`: Regional code
+- `temperature`: °C
+- `humidity`: Percentage
+- `wind_speed`: m/s
+- `precipitation`: mm
 
-## Key Functions
+## Key Modules
 
-- **Data Ingestion**: Fetches weather data from the API for specified regions and time periods.
-- **Error Handling**: Implements retries for failed API requests and logs errors for debugging.
-- **Kafka Integration**: Publishes processed data to a Kafka topic for downstream processing.
-- **Graceful Shutdown**: Handles termination signals (`SIGINT`, `SIGTERM`) to ensure clean shutdown of the service.
+- `main.py`: Entry point for fetching and publishing weather data
+- `config.py`: Region configuration and runtime environment variables
 
 ## Dependencies
 
-- `loguru`: For logging
-- `quixstreams`: For Kafka integration
-- `pydantic`: For configuration management
-- `requests`: For API calls
+- `loguru`: Structured logging
+- `quixstreams`: Kafka publishing via Quix SDK
+- `pydantic`: Environment variable management
+- `requests`: HTTP communication with weather API
 
 ## Development Notes
 
-- The service uses `loguru` for detailed logging, including retries and API errors.
-- The `LAST_N_DAYS` configuration determines the range of historical data to fetch in `historical` mode.
-- The `LIVE_OR_HISTORICAL` configuration toggles between live and historical data collection.
+- Retries are implemented using simple retry loops with wait intervals.
+- The Kafka producer uses Quix Streams with Avro serialization disabled for simplicity.
+- The service uses UTC timestamps across all data points.
 
 ## Future Enhancements
 
-- Seamesly integrate LIVE or HISTORICAL pipelines
-- Add support for additional weather attributes or regions.
-- Implement advanced error handling for Kafka publishing.
-- Add monitoring and alerting for data ingestion failures.
+- Implement `live` ingestion mode
+- Add CLI interface for custom time range inputs
+- Add Prometheus metrics for ingestion performance
+- Improve resilience on producer exceptions
+
+---
+
+## License
+
+MIT License
+
+---
+
+## Contact
+
+For issues or collaboration, contact: `jlozanol@protonmail.com`
