@@ -10,7 +10,14 @@ from config import config
 from feature_creator import FeatureCreator
 from loguru import logger
 from model_fetcher import PricePredictor
-from plots import plot_eia_regions_map, plot_region_predictions
+from plots import (
+    plot_eia_regions_map,
+	plot_region_predictions,
+	plot_feature_importance,
+	plot_hourly_demand_temprature,
+    plot_weekday_weekend_comparison,
+)
+from utils import calculate_feature_importance, format_feature_df, calculate_model_accuracy
 
 # Define paths for storing models
 MODELS_DIR = Path('model_artifacts')
@@ -237,25 +244,23 @@ def process_single_region(
 			st.warning(f'   - No timestamp_ms in forecast for {region_name}')
 
 		# Merge with demand data
-		if (
-			'timestamp_ms' in region_features.columns
-			and 'demand' in region_features.columns
-		):
-			demand_data = region_features[['timestamp_ms', 'demand']].copy()
-			pred_df = pred_df.merge(demand_data, on='timestamp_ms', how='left')
+		if 'timestamp_ms' in region_features.columns:
+			# Merge all columns from region_features
+			feature_data = region_features.copy()
+			pred_df = pred_df.merge(feature_data, on='timestamp_ms', how='left')
 		else:
 			st.warning(
-				f'   - Missing timestamp_ms or demand in features for {region_name}'
+				f'   - Missing timestamp_ms in features for {region_name}'
 			)
 
-		# Convert timestamp
-		pred_df['timestamp'] = pd.to_datetime(
-			pred_df['timestamp_ms'], unit='ms', utc=True
-		)
+		# Identify the last row
+		last_row = pred_df.tail(1)
 
-		# Filter to last 169 hours
-		pred_df = pred_df.iloc[-169:].copy()
-		pred_df = pred_df.reset_index(drop=True)
+		# Drop NaNs from all rows except the last one
+		pred_df = pred_df.iloc[:-1].dropna()
+
+		# Append the last row back
+		pred_df = pd.concat([pred_df, last_row], ignore_index=True)
 
 		st.write(f'✅ Predictions created for {region_name}:')
 
@@ -397,6 +402,8 @@ def main() -> None:
 					prediction_dfs = st.session_state.prediction_results[
 						'prediction_dfs'
 					]
+					st.markdown('---')
+					st.header('Predictions and Demand Forecasts')
 					plot_region_predictions(selected_region, prediction_dfs)
 				except Exception as e:
 					st.error(f'Error displaying predictions: {e}')
@@ -404,6 +411,34 @@ def main() -> None:
 
 					st.text('Full error traceback:')
 					st.text(traceback.format_exc())
+				
+				# Create a new subsection for feature analysis
+				st.markdown('---')
+				st.header('Feature Analysis')
+				# # Print prediction_dfs values for debugging
+				# st.dataframe(prediction_dfs[f'{selected_region.lower()}_prediction_df'])
+
+				# # Print prediction_dfs values for debugging
+				# st.dataframe(format_feature_df(selected_region, prediction_dfs, prediction_plot=False)[0])
+
+				important_features = calculate_feature_importance(
+					selected_region, prediction_dfs
+				)
+				plot_feature_importance(important_features, selected_region)
+				
+				plot_hourly_demand_temprature(
+					selected_region, prediction_dfs
+				)
+				plot_weekday_weekend_comparison(selected_region, prediction_dfs)
+
+				# Show accuracy
+				st.subheader(f'Prediction Accuracy – {selected_region.upper()}')
+				pred_df, _ = format_feature_df(selected_region, prediction_dfs, prediction_plot=True)
+				metrics_df = calculate_model_accuracy(pred_df)
+
+				st.dataframe(metrics_df.style.format(precision=2), use_container_width=True)
+
+
 
 		# Footer
 		st.markdown('---')

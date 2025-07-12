@@ -204,3 +204,4 @@ certificates/
 **.joblib
 files
 model_artifacts/
+**.sqlite
