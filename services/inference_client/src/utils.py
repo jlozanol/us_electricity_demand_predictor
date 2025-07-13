@@ -1,14 +1,14 @@
-from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import mutual_info_regression
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from typing import Optional, Tuple
+
 import pandas as pd
 import streamlit as st
-from typing import Tuple, Optional
+from sklearn.feature_selection import mutual_info_regression
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.preprocessing import StandardScaler
+
 
 def format_feature_df(
-	selected_region: str,
-	prediction_dfs: pd.DataFrame,
-	prediction_plot: bool
+	selected_region: str, prediction_dfs: pd.DataFrame, prediction_plot: bool
 ) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
 	"""
 	Format the feature DataFrame for further feature calculations or plotting.
@@ -31,7 +31,7 @@ def format_feature_df(
 		'MIDW': 'America/Chicago',
 		'NW': 'America/Los_Angeles',
 		'NY': 'America/New_York',
-		'SW': 'America/Phoenix'
+		'SW': 'America/Phoenix',
 	}
 
 	region_key = f'{selected_region.lower()}_prediction_df'
@@ -45,10 +45,10 @@ def format_feature_df(
 	# Convert timestamps in UNIX format to local time
 	local_tz = region_timezones[selected_region]
 	pred_df['timestamp'] = pd.to_datetime(
-		pred_df['timestamp_ms'],    # UNIX timestamp in milliseconds
-		unit='ms',                  # unit = milliseconds
-		utc=True                    # interpret as UTC initially
-	).dt.tz_convert(local_tz)       # convert to the region's timezone
+		pred_df['timestamp_ms'],  # UNIX timestamp in milliseconds
+		unit='ms',  # unit = milliseconds
+		utc=True,  # interpret as UTC initially
+	).dt.tz_convert(local_tz)  # convert to the region's timezone
 
 	if prediction_plot:
 		return pred_df, None
@@ -57,9 +57,11 @@ def format_feature_df(
 		target_df = pred_df['prediction'].copy()
 		features_df = pred_df.drop(columns=['prediction'])
 		return features_df, target_df
-	
 
-def calculate_feature_importance(selected_region: str, prediction_dfs: dict[str, pd.DataFrame]) -> pd.DataFrame | None:
+
+def calculate_feature_importance(
+	selected_region: str, prediction_dfs: dict[str, pd.DataFrame]
+) -> pd.DataFrame | None:
 	"""
 	Calculate feature importance using mutual information regression.
 
@@ -71,9 +73,13 @@ def calculate_feature_importance(selected_region: str, prediction_dfs: dict[str,
 		pd.DataFrame or None: DataFrame with 'feature' and 'importance' columns sorted descending.
 	"""
 
-	features_df, target_df = format_feature_df(selected_region, prediction_dfs, prediction_plot=False)
+	features_df, target_df = format_feature_df(
+		selected_region, prediction_dfs, prediction_plot=False
+	)
 	# Drop columns that are not needed for feature importance
-	features_df = features_df.drop(columns=['timestamp_ms','timestamp','demand_forecast', 'demand'])
+	features_df = features_df.drop(
+		columns=['timestamp_ms', 'timestamp', 'demand_forecast', 'demand']
+	)
 
 	X = features_df.iloc[:-1]
 	y = target_df.iloc[:-1]
@@ -89,70 +95,77 @@ def calculate_feature_importance(selected_region: str, prediction_dfs: dict[str,
 	mi_scores = mutual_info_regression(X_scaled, y)
 
 	# Return as DataFrame
-	importance_df = pd.DataFrame({
-		"feature": feature_cols,
-		"importance": mi_scores
-	}).sort_values("importance", ascending=False)
+	importance_df = pd.DataFrame(
+		{'feature': feature_cols, 'importance': mi_scores}
+	).sort_values('importance', ascending=False)
 
 	return importance_df
 
-def extract_time_features(features_df: pd.DataFrame, timestamp_col: str = 'timestamp') -> pd.DataFrame:
-    """
-    Extracts time-based features from a datetime column in the DataFrame.
 
-    Args:
-        df (pd.DataFrame): Input DataFrame with a datetime column.
-        timestamp_col (str): Name of the datetime column to extract features from.
+def extract_time_features(
+	features_df: pd.DataFrame, timestamp_col: str = 'timestamp'
+) -> pd.DataFrame:
+	"""
+	Extracts time-based features from a datetime column in the DataFrame.
 
-    Returns:
-        pd.DataFrame: DataFrame with added time-based features.
-    """
+	Args:
+	    df (pd.DataFrame): Input DataFrame with a datetime column.
+	    timestamp_col (str): Name of the datetime column to extract features from.
 
-    features_df['hour'] = features_df[timestamp_col].dt.hour
-    features_df['day_of_week'] = features_df[timestamp_col].dt.dayofweek
-    features_df['month'] = features_df[timestamp_col].dt.month
-    features_df['is_weekend'] = features_df['day_of_week'].isin([5, 6]).astype(int)
-    features_df['part_of_day'] = pd.cut(
-        features_df['hour'], 
-        bins=[0, 6, 12, 18, 24], 
-        labels=['Night', 'Morning', 'Afternoon', 'Evening'],
-        right=False
-    )
+	Returns:
+	    pd.DataFrame: DataFrame with added time-based features.
+	"""
 
-    return features_df
+	features_df['hour'] = features_df[timestamp_col].dt.hour
+	features_df['day_of_week'] = features_df[timestamp_col].dt.dayofweek
+	features_df['month'] = features_df[timestamp_col].dt.month
+	features_df['is_weekend'] = features_df['day_of_week'].isin([5, 6]).astype(int)
+	features_df['part_of_day'] = pd.cut(
+		features_df['hour'],
+		bins=[0, 6, 12, 18, 24],
+		labels=['Night', 'Morning', 'Afternoon', 'Evening'],
+		right=False,
+	)
+
+	return features_df
+
 
 def calculate_model_accuracy(pred_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Compute accuracy metrics for model prediction and EIA forecast.
+	"""
+	Compute accuracy metrics for model prediction and EIA forecast.
 
-    Returns a DataFrame with MAE, RMSE, MAPE, and R2 for both.
-    """
-    df = pred_df.dropna(subset=['demand', 'prediction', 'demand_forecast'])
+	Returns a DataFrame with MAE, RMSE, MAPE, and R2 for both.
+	"""
+	df = pred_df.dropna(subset=['demand', 'prediction', 'demand_forecast'])
 
-    actual = df['demand']
-    model_pred = df['prediction']
-    forecast = df['demand_forecast']
+	actual = df['demand']
+	model_pred = df['prediction']
+	forecast = df['demand_forecast']
 
-    def mape(y_true, y_pred):
-        return (abs((y_true - y_pred) / y_true).replace([float('inf')], 0).mean()) * 100
+	def mape(y_true, y_pred):
+		return (abs((y_true - y_pred) / y_true).replace([float('inf')], 0).mean()) * 100
 
-    metrics = {
-        'MAE': [
-            mean_absolute_error(actual, model_pred),
-            mean_absolute_error(actual, forecast),
-        ],
-        'RMSE': [
-            mean_squared_error(actual, model_pred),
-            mean_squared_error(actual, forecast),
-        ],
-        'MAPE': [
-            mape(actual, model_pred),
-            mape(actual, forecast),
-        ],
-        'R²': [
-            r2_score(actual, model_pred),
-            r2_score(actual, forecast),
-        ]
-    }
+	metrics = {
+		'MAE': [
+			mean_absolute_error(actual, model_pred),
+			mean_absolute_error(actual, forecast),
+		],
+		'RMSE': [
+			mean_squared_error(actual, model_pred),
+			mean_squared_error(actual, forecast),
+		],
+		'MAPE': [
+			mape(actual, model_pred),
+			mape(actual, forecast),
+		],
+		'R²': [
+			r2_score(actual, model_pred),
+			r2_score(actual, forecast),
+		],
+	}
 
-    return pd.DataFrame(metrics, index=['Model', 'EIA Forecast']).T.reset_index().rename(columns={'index': 'Metric'})
+	return (
+		pd.DataFrame(metrics, index=['Model', 'EIA Forecast'])
+		.T.reset_index()
+		.rename(columns={'index': 'Metric'})
+	)

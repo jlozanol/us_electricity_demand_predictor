@@ -205,3 +205,4 @@ certificates/
 files
 model_artifacts/
 **.sqlite
+**.pptx
